@@ -1,6 +1,8 @@
 # teacher_student
 
 # Dataset Structure
+## Run
+uv run prepare_dataset.py
 
 This repository prepares two medical Visual Question Answering (VQA) datasets:
 
