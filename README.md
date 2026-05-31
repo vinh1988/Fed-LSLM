@@ -1,22 +1,9 @@
-# teacher_student
+# Federated Large-Small Language Models with Multimodal Retrieval-Augmented Generation for Medical Visual Question Answering
 
-## PathVQA DataLoader (smoke test)
+## How to Run
+uv run prepare_dataset.py
 
-Code lives in this repo (`src/data/`, `scripts/`). Mentor data is under `processed_data/PathVQA/`.
-
-```bash
-cd teacher_student
-uv sync
-python scripts/check_dataloader.py
-```
-
-Defaults: `data_root=processed_data/PathVQA/centralized`, train/val/client CSVs under the same tree.
-
-`data_root` must be `centralized/` (images are at `centralized/images/train/...`).
-
----
-
-# Dataset Structure
+## Dataset Structure
 
 This repository prepares two medical Visual Question Answering (VQA) datasets:
 
@@ -33,6 +20,9 @@ The datasets are converted into a unified format and partitioned for centralized
 processed_data/
 │
 ├── PathVQA/
+│   ├── dataset_summary.csv
+│   ├── config.json
+│   │
 │   ├── raw/
 │   │   ├── train.csv
 │   │   ├── validation.csv
@@ -50,11 +40,16 @@ processed_data/
 │   │
 │   ├── federated_iid/
 │   │   ├── k2/
-│   │   │   ├── client_0.csv
 │   │   │   ├── client_1.csv
+│   │   │   ├── client_2.csv
 │   │   │   └── stats.csv
 │   │   │
 │   │   ├── k3/
+│   │   │   ├── client_1.csv
+│   │   │   ├── client_2.csv
+│   │   │   ├── client_3.csv
+│   │   │   └── stats.csv
+│   │   │
 │   │   ├── k4/
 │   │   └── k5/
 │   │
@@ -71,41 +66,69 @@ processed_data/
 │   │       ├── k4/
 │   │       └── k5/
 │   │
-│   └── config.json
+│   └── visualizations/
 │
 └── VQA-RAD/
+    ├── dataset_summary.csv
+    ├── config.json
+    │
     ├── raw/
+    │   ├── train.csv
+    │   ├── test.csv
+    │   └── images/
+    │
     ├── centralized/
+    │
     ├── federated_iid/
+    │
     ├── federated_noniid/
-    └── config.json
+    │
+    └── visualizations/
 ```
 
 ---
 
-## CSV Format
+## CSV Schema
 
-All CSV files use the same schema.
+All generated CSV files use the following schema:
 
-| Column     | Description            |
-| ---------- | ---------------------- |
-| image_path | Relative path to image |
-| question   | Medical VQA question   |
-| answer     | Ground-truth answer    |
+```csv
+image_path,question,answer,question_type,split
+```
 
 Example:
 
 ```csv
-image_path,question,answer
-images/train/0000001.jpg,Are regions of the brain infarcted?,yes
-images/train/0000002.jpg,Where are liver stem cells located?,in the canals of hering
+image_path,question,answer,question_type,split
+images/train/0000001.jpg,Are regions of the brain infarcted?,yes,closed,train
+images/train/0000002.jpg,Where are liver stem cells located?,in the canals of hering,open,train
 ```
 
 ---
 
-## Centralized Setting
+## Question Types
 
-The centralized setting uses the entire training dataset.
+Questions are automatically categorized into:
+
+| Type   | Description               |
+| ------ | ------------------------- |
+| closed | Binary answers (yes/no)   |
+| open   | Free-text medical answers |
+
+Rule:
+
+```python
+if answer.lower() in {"yes", "no"}:
+    question_type = "closed"
+else:
+    question_type = "open"
+```
+
+---
+
+## Centralized Learning
+
+The centralized dataset uses the complete training split.
 
 ```text
 centralized/
@@ -120,30 +143,28 @@ This serves as the upper-bound baseline.
 
 ## Federated IID Setting
 
-The training data are randomly and uniformly distributed across clients.
+Training samples are randomly and uniformly distributed among clients.
 
 Example:
 
 ```text
 federated_iid/
 └── k5/
-    ├── client_0.csv
     ├── client_1.csv
     ├── client_2.csv
     ├── client_3.csv
     ├── client_4.csv
+    ├── client_5.csv
     └── stats.csv
 ```
-
-Client datasets have approximately equal sample counts.
 
 ---
 
 ## Federated Non-IID Setting
 
-Answer-based Dirichlet partitioning is applied.
+Answer-based Dirichlet partitioning is used to simulate heterogeneous medical institutions.
 
-Two heterogeneity levels are used:
+Two heterogeneity levels are provided:
 
 | Alpha | Heterogeneity    |
 | ----- | ---------------- |
@@ -156,11 +177,11 @@ Example:
 federated_noniid/
 └── alpha_0.1/
     └── k5/
-        ├── client_0.csv
         ├── client_1.csv
         ├── client_2.csv
         ├── client_3.csv
         ├── client_4.csv
+        ├── client_5.csv
         └── stats.csv
 ```
 
@@ -168,38 +189,103 @@ Smaller alpha values produce stronger client heterogeneity.
 
 ---
 
-## Teacher–Student Federated Learning
+## Client Statistics
 
-The generated partitions are intended for:
+Each federated configuration contains:
 
-* FedAvg
-* FedProx
-* Teacher–Student Federated Learning
+```text
+stats.csv
+```
 
-Experimental configurations:
+Format:
 
-| Setting           | Clients        |
-| ----------------- | -------------- |
-| IID               | k = 2, 3, 4, 5 |
-| Non-IID (α = 0.5) | k = 2, 3, 4, 5 |
-| Non-IID (α = 0.1) | k = 2, 3, 4, 5 |
+```csv
+client,samples,open_questions,closed_questions
+client_1,3921,3012,909
+client_2,3855,2951,904
+client_3,4012,3097,915
+```
 
 ---
 
-## Visualization Files
+## Dataset Summary
 
-Generated figures:
+Each dataset contains:
+
+```text
+dataset_summary.csv
+```
+
+Example:
+
+```csv
+split,samples,open_questions,closed_questions
+train,19654,15410,4244
+validation,6259,4910,1349
+test,6719,5305,1414
+```
+
+---
+
+## Configuration
+
+Each dataset contains:
+
+```text
+config.json
+```
+
+Example:
+
+```json
+{
+  "dataset": "PathVQA",
+  "seed": 42,
+  "clients": [2, 3, 4, 5],
+  "alphas": [0.5, 0.1],
+  "partition_method": "answer_dirichlet",
+  "question_types": [
+    "open",
+    "closed"
+  ]
+}
+```
+
+---
+
+## Visualization Outputs
+
+Generated figures are stored under:
 
 ```text
 visualizations/
-├── PathVQA_split_sizes.png
-├── PathVQA_client_distribution.png
-├── PathVQA_heatmap_alpha_0.5_k5.png
-├── PathVQA_heatmap_alpha_0.1_k5.png
-├── VQA-RAD_split_sizes.png
-├── VQA-RAD_client_distribution.png
-├── VQA-RAD_heatmap_alpha_0.5_k5.png
-└── VQA-RAD_heatmap_alpha_0.1_k5.png
 ```
 
-These visualizations characterize dataset size, client distributions, and Non-IID heterogeneity.
+Examples:
+
+```text
+PathVQA_split_sizes.png
+PathVQA_client_distribution.png
+PathVQA_heatmap_alpha_0.5_k5.png
+PathVQA_heatmap_alpha_0.1_k5.png
+
+VQA-RAD_split_sizes.png
+VQA-RAD_client_distribution.png
+VQA-RAD_heatmap_alpha_0.5_k5.png
+VQA-RAD_heatmap_alpha_0.1_k5.png
+```
+
+---
+
+## Intended Research Usage
+
+This dataset organization supports:
+
+* Centralized Training
+* Federated Averaging (FedAvg)
+* Teacher–Student Federated Learning
+* Open vs Closed Question Analysis
+* IID vs Non-IID Evaluation
+* Medical VQA Benchmarking
+
+The Non-IID partitions are generated using answer-based Dirichlet sampling, which is suitable for studying heterogeneous medical institutions in federated learning environments.

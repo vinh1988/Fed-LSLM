@@ -34,6 +34,19 @@ np.random.seed(SEED)
 
 CLIENTS = [2, 3, 4, 5]
 NONIID_ALPHAS = [0.5, 0.1]
+CLOSED_ANSWERS = {
+    "yes",
+    "no"
+}
+
+
+def get_question_type(answer):
+    answer = str(answer).strip().lower()
+
+    if answer in CLOSED_ANSWERS:
+        return "closed"
+
+    return "open"
 
 DATASETS = {
     "PathVQA": "flaviagiammarino/path-vqa",
@@ -42,6 +55,25 @@ DATASETS = {
 
 OUTPUT_ROOT = Path("processed_data")
 
+def save_dataset_summary(exported, output_file):
+    rows = []
+
+    for split_name, df in exported.items():
+        rows.append({
+            "split": split_name,
+            "samples": len(df),
+            "open_questions": int(
+                (df["question_type"] == "open").sum()
+            ),
+            "closed_questions": int(
+                (df["question_type"] == "closed").sum()
+            )
+        })
+
+    pd.DataFrame(rows).to_csv(
+        output_file,
+        index=False
+    )
 
 def ensure_dir(path):
     Path(path).mkdir(parents=True, exist_ok=True)
@@ -61,7 +93,11 @@ def export_split(split_ds, split_name, out_dir):
         rows.append({
             "image_path": str(img_path.relative_to(out_dir)),
             "question": sample["question"],
-            "answer": sample["answer"]
+            "answer": sample["answer"],
+            "question_type": get_question_type(
+                sample["answer"]
+            ),
+            "split": split_name
         })
 
     df = pd.DataFrame(rows)
@@ -76,14 +112,28 @@ def create_stats(client_files, output_file):
     rows = []
 
     for file in client_files:
+
         df = pd.read_csv(file)
+
+        open_count = (
+            df["question_type"] == "open"
+        ).sum()
+
+        closed_count = (
+            df["question_type"] == "closed"
+        ).sum()
 
         rows.append({
             "client": file.stem,
-            "samples": len(df)
+            "samples": len(df),
+            "open_questions": int(open_count),
+            "closed_questions": int(closed_count)
         })
 
-    pd.DataFrame(rows).to_csv(output_file, index=False)
+    pd.DataFrame(rows).to_csv(
+        output_file,
+        index=False
+    )
 
 
 def iid_partition(df, k):
@@ -102,7 +152,12 @@ def iid_partition(df, k):
     return splits
 
 def dirichlet_partition(df, k, alpha):
-    labels = df["answer"].astype(str)
+    labels = (
+        df["answer"]
+        .astype(str)
+        .str.lower()
+        .str.strip()
+    )
 
     unique_labels = labels.unique()
 
@@ -141,7 +196,7 @@ def save_client_splits(splits, out_dir):
 
     files = []
 
-    for i, part in enumerate(splits):
+    for i, part in enumerate(splits, start=1):
         file = out_dir / f"client_{i}.csv"
         part.to_csv(file, index=False)
         files.append(file)
@@ -173,6 +228,11 @@ def process_dataset(dataset_name, hf_name):
             split_name,
             raw_dir
         )
+    
+    save_dataset_summary(
+        exported,
+        base_dir / "dataset_summary.csv"
+    )
 
     ensure_dir(central_dir)
 
@@ -217,6 +277,11 @@ def process_dataset(dataset_name, hf_name):
         "seed": SEED,
         "clients": CLIENTS,
         "alphas": NONIID_ALPHAS,
+        "partition_method": "answer_dirichlet",
+        "question_types": [
+            "open",
+            "closed"
+        ]
     }
 
     with open(base_dir / "config.json", "w") as f:
