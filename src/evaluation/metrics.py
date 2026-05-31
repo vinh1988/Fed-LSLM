@@ -13,6 +13,7 @@ aggregate_metrics        — weighted average across multiple batch dicts
 
 from __future__ import annotations
 
+from collections import Counter
 import logging
 import re
 import string
@@ -60,12 +61,14 @@ def _token_f1(prediction: str, reference: str) -> float:
     if not pred_tokens or not ref_tokens:
         return 0.0
 
-    common = sum(1 for t in pred_tokens if t in ref_tokens)
-    if common == 0:
+    common = Counter(pred_tokens) & Counter(ref_tokens)
+    num_same = sum(common.values())
+
+    if num_same == 0:
         return 0.0
 
-    precision = common / len(pred_tokens)
-    recall = common / len(ref_tokens)
+    precision = num_same / len(pred_tokens)
+    recall = num_same / len(ref_tokens)
     return 2 * precision * recall / (precision + recall)
 
 
