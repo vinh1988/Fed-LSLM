@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import torch
-
-if TYPE_CHECKING:
-    from transformers import PreTrainedTokenizer
 
 
 def pathvqa_collate_fn(
     batch: list[dict],
-    tokenizer: PreTrainedTokenizer | None = None,
+    tokenizer: Any | None = None,
     max_length: int = 128,
 ) -> dict[str, Any]:
     """
@@ -25,7 +22,7 @@ def pathvqa_collate_fn(
         max_length: Max token length when tokenizing questions.
 
     Returns:
-        Dict with stacked images, text fields, answer-type masks, and optional
+        Dict with stacked images, text fields, question-type masks, and optional
         tokenized questions.
     """
     row_ids = [item["row_id"] for item in batch]
@@ -33,14 +30,13 @@ def pathvqa_collate_fn(
     questions = [item["question"] for item in batch]
     answers = [item["answer"] for item in batch]
     question_types = [item["question_type"] for item in batch]
-    answer_types = [item["answer_type"] for item in batch]
 
     yes_no_mask = torch.tensor(
-        [at == "yes_no" for at in answer_types],
+        [qt == "closed" for qt in question_types],
         dtype=torch.bool,
     )
     open_ended_mask = torch.tensor(
-        [at == "open_ended" for at in answer_types],
+        [qt == "open" for qt in question_types],
         dtype=torch.bool,
     )
 
@@ -50,7 +46,6 @@ def pathvqa_collate_fn(
         "questions": questions,
         "answers": answers,
         "question_types": question_types,
-        "answer_types": answer_types,
         "yes_no_mask": yes_no_mask,
         "open_ended_mask": open_ended_mask,
     }

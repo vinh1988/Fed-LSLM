@@ -120,39 +120,31 @@ class PathVQADataset(TorchDataset):
             "question": question,
             "answer": str(row["answer"]),
             "question_type": str(row["question_type"]),
-            "answer_type": str(row["answer_type"]),
+            "split": str(row["split"]),
         }
 
     def get_yes_no_indices(self) -> list[int]:
-        """Return dataset indices where answer_type is yes_no."""
+        """Return dataset indices where question_type is closed."""
         if self._yes_no_indices is None:
             self._yes_no_indices = self.df.index[
-                self.df["answer_type"] == "yes_no"
+                self.df["question_type"] == "closed"
             ].tolist()
         return self._yes_no_indices
 
     def get_open_ended_indices(self) -> list[int]:
-        """Return dataset indices where answer_type is open_ended."""
+        """Return dataset indices where question_type is open."""
         if self._open_ended_indices is None:
             self._open_ended_indices = self.df.index[
-                self.df["answer_type"] == "open_ended"
+                self.df["question_type"] == "open"
             ].tolist()
         return self._open_ended_indices
 
     def get_answer_vocab(self, max_size: int = 500) -> list[str]:
         """
-        Build answer vocabulary from this manifest (train only for training).
-
-        Always places "yes" and "no" first, then top frequent answers by count.
+        Build answer vocabulary from open-ended questions only.
         """
-        if max_size < 2:
-            raise ValueError("max_size must be at least 2 for yes/no entries.")
-
-        normalized = self.df["answer"].astype(str).str.lower().str.strip()
+        open_df = self.df[self.df["question_type"] == "open"]
+        normalized = open_df["answer"].astype(str).str.lower().str.strip()
         counts = Counter(normalized.tolist())
-        for token in ("yes", "no"):
-            counts.pop(token, None)
-
-        remaining_slots = max_size - 2
-        frequent = [ans for ans, _ in counts.most_common(remaining_slots)]
-        return ["yes", "no"] + frequent
+        frequent = [ans for ans, _ in counts.most_common(max_size)]
+        return frequent

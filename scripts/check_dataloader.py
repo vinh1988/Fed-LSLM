@@ -113,11 +113,11 @@ def _print_dataset_stats(title: str, csv_path: Path, data_root: Path) -> PathVQA
     print(f"    CSV           : {csv_path}")
     print(f"    data_root     : {data_root}")
     dataset = PathVQADataset(csv_path=csv_path, data_root=data_root)
-    n_yes_no = len(dataset.get_yes_no_indices())
+    n_closed = len(dataset.get_yes_no_indices())
     n_open = len(dataset.get_open_ended_indices())
     print(f"    Total samples : {_format_count(len(dataset))}")
-    print(f"    Yes/No        : {_format_count(n_yes_no)}")
-    print(f"    Open-ended    : {_format_count(n_open)}")
+    print(f"    Closed / Yes-No: {_format_count(n_closed)}")
+    print(f"    Open / Open-ended: {_format_count(n_open)}")
     print()
     return dataset
 
@@ -165,12 +165,15 @@ def main() -> None:
     )
     assert len(batch["questions"]) == args.batch_size
     assert len(batch["answers"]) == args.batch_size
+    assert "question_types" in batch
+    assert "answer_types" not in batch
     assert batch["yes_no_mask"].shape == torch.Size([args.batch_size])
     assert batch["open_ended_mask"].shape == torch.Size([args.batch_size])
 
     print(f"    images          : {batch['images'].shape} ✓")
     print(f"    questions       : list[{len(batch['questions'])}] ✓")
     print(f"    answers         : list[{len(batch['answers'])}] ✓")
+    print(f"    question_types  : list[{len(batch['question_types'])}] ✓")
     print(f"    yes_no_mask     : {batch['yes_no_mask'].shape} ✓")
     print(f"    open_ended_mask : {batch['open_ended_mask'].shape} ✓")
     print()
@@ -182,7 +185,6 @@ def main() -> None:
     print(f"    question      : {sample['question']!r}")
     print(f"    answer        : {sample['answer']!r}")
     print(f"    question_type : {sample['question_type']}")
-    print(f"    answer_type   : {sample['answer_type']}")
     print(f"    image shape   : {img.shape}")
     print(f"    image range   : [min={img.min().item():.4f}, max={img.max().item():.4f}]")
     print()
