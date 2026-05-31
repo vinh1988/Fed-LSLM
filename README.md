@@ -1,5 +1,21 @@
 # teacher_student
 
+## PathVQA DataLoader (smoke test)
+
+Code lives in this repo (`src/data/`, `scripts/`). Mentor data is under `processed_data/PathVQA/`.
+
+```bash
+cd teacher_student
+uv sync
+python scripts/check_dataloader.py
+```
+
+Defaults: `data_root=processed_data/PathVQA/centralized`, train/val/client CSVs under the same tree.
+
+`data_root` must be `centralized/` (images are at `centralized/images/train/...`).
+
+---
+
 # Dataset Structure
 
 This repository prepares two medical Visual Question Answering (VQA) datasets:
