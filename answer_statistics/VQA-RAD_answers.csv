@@ -1,0 +1,518 @@
+answer,count,percentage
+no,606,27.0053
+yes,585,26.0695
+axial,43,1.9162
+right,26,1.1586
+left,19,0.8467
+pa,15,0.6684
+ct,13,0.5793
+brain,13,0.5793
+fat,9,0.4011
+mri,8,0.3565
+x-ray,8,0.3565
+one,8,0.3565
+right side,8,0.3565
+with contrast,7,0.3119
+bilateral,7,0.3119
+diffuse,7,0.3119
+right lung,7,0.3119
+right upper lobe,7,0.3119
+pancreas,6,0.2674
+flair,6,0.2674
+right sided pleural effusion,6,0.2674
+"5.6cm focal, predominantly hypodense",6,0.2674
+lateral ventricles,6,0.2674
+left kidney,6,0.2674
+female,6,0.2674
+contrast,5,0.2228
+right temporal lobe,5,0.2228
+t2 weighted,5,0.2228
+abscess,5,0.2228
+ribs,5,0.2228
+right frontal lobe,5,0.2228
+hyperintense,4,0.1783
+calcification,4,0.1783
+pleural effusion,4,0.1783
+chest,4,0.1783
+infarct,4,0.1783
+oral and iv,4,0.1783
+subarachnoid,4,0.1783
+gi,4,0.1783
+right lobe of the liver,4,0.1783
+ring-enhancing lesion,4,0.1783
+retrocardiac,4,0.1783
+air,4,0.1783
+chest x-ray,4,0.1783
+cerebellum,4,0.1783
+enlarged,4,0.1783
+left side,4,0.1783
+white matter,4,0.1783
+ring enhancing lesion,4,0.1783
+4th ventricle,4,0.1783
+right cerebellum,4,0.1783
+dwi,4,0.1783
+hemorrhage,3,0.1337
+xray,3,0.1337
+heterogeneous,3,0.1337
+hydropneumothorax,3,0.1337
+stomach,3,0.1337
+normal,3,0.1337
+basal ganglia,3,0.1337
+mri - t2 weighted,3,0.1337
+cystic,3,0.1337
+calcifications,3,0.1337
+vascular,3,0.1337
+not sure,3,0.1337
+hypodense,3,0.1337
+bilateral lungs,3,0.1337
+pulmonary nodules,3,0.1337
+gallstones,3,0.1337
+cystic lesions,3,0.1337
+right hemisphere,3,0.1337
+kidneys,3,0.1337
+the liver,3,0.1337
+coronal,3,0.1337
+t2,3,0.1337
+left cerebellum,3,0.1337
+abnormal,3,0.1337
+middle mogul,3,0.1337
+pineal region,2,0.0891
+bilateral frontal lobes,2,0.0891
+right colon,2,0.0891
+isointense,2,0.0891
+micronodular,2,0.0891
+left rectus abdominus,2,0.0891
+nipple location,2,0.0891
+bilateral frontal lobes and body of corpus callosum,2,0.0891
+distal basilar artery,2,0.0891
+suprasellar,2,0.0891
+mri/flair,2,0.0891
+ascites,2,0.0891
+mri-flair,2,0.0891
+right kidney,2,0.0891
+mr - t2 weighted,2,0.0891
+fatty infiltration,2,0.0891
+jejunum,2,0.0891
+mr - adc map,2,0.0891
+nodules,2,0.0891
+descending colon,2,0.0891
+"thalami, left occipital lobe, brainstem and left cerebellum",2,0.0891
+mr - flair,2,0.0891
+spleen,2,0.0891
+2,2,0.0891
+in the bowels,2,0.0891
+non-enhanced,2,0.0891
+ap,2,0.0891
+mid abdomen,2,0.0891
+sigmoid flexture of the colon,2,0.0891
+underneath the right hemidiaphragm,2,0.0891
+posterior fossa,2,0.0891
+right sylvian fissure,2,0.0891
+right subclavian vein,2,0.0891
+diverticuli,2,0.0891
+psoas major muscle,2,0.0891
+aorta,2,0.0891
+right subdural hematoma,2,0.0891
+appendix,2,0.0891
+hepatocellular carcioma,2,0.0891
+punctate,2,0.0891
+central hyperintensity and surrounding hypointensity,2,0.0891
+there is massive cerebral hemisphere edema,2,0.0891
+left thalamus,2,0.0891
+small subdural hematoma with cerebral edema,2,0.0891
+adjacent to the appendix,2,0.0891
+left mca,2,0.0891
+ms plaques,2,0.0891
+peritoneum,2,0.0891
+multiple sclerosis,2,0.0891
+cerebrum and lateral ventricles,2,0.0891
+right convexity,2,0.0891
+abnormal hyperintensity in the right occipital lobe,2,0.0891
+pneumonia,2,0.0891
+hyperintensity of the left basal ganglia,2,0.0891
+partial silhouetting,2,0.0891
+splenule,2,0.0891
+necrosis,2,0.0891
+posteriorly,2,0.0891
+ureteral obstruction,2,0.0891
+psoas muscles,2,0.0891
+abcess,2,0.0891
+right mca,2,0.0891
+a catheter,2,0.0891
+in the cortex and basal ganglia bilaterally,2,0.0891
+left lobe mass 1.5 x 1.8 cm,2,0.0891
+nephroblastomatosis,2,0.0891
+haustra,2,0.0891
+maybe,2,0.0891
+pleural plaques,2,0.0891
+gray matter,2,0.0891
+left hepatic lobe,2,0.0891
+paratracheal area,2,0.0891
+bilateral pleural effusion,2,0.0891
+basal ganglia (caudate and putamen),2,0.0891
+cardiopulmonary,2,0.0891
+semi-upright position,2,0.0891
+sharp costophrenic angles,2,0.0891
+right parietal,2,0.0891
+horsehoe kidney,2,0.0891
+"blunting of the costophrenic angle, loss of the right hemidiaphragm and right heart border",2,0.0891
+increased opacity in the left retrocardiac region,2,0.0891
+cirrhosis,2,0.0891
+right paratracheal mass lesion,2,0.0891
+it is enlarged with prominence of the aortic knob,2,0.0891
+shrunken and nodular,2,0.0891
+atherosclerotic calcification,2,0.0891
+cortical ribbon of right occipital lobe with extension into right posterior temporal lobe,2,0.0891
+12,2,0.0891
+nucleus pulposus,2,0.0891
+right parietal lobe,2,0.0891
+metastasis,2,0.0891
+volume loss,2,0.0891
+prior surgery,2,0.0891
+right superior cavoatrial junction,2,0.0891
+ischemia,2,0.0891
+suprasellar cistern,2,0.0891
+5 cm,2,0.0891
+small bowel,2,0.0891
+left temporal lobe,2,0.0891
+both,2,0.0891
+less dense,2,0.0891
+gastrointestinal,2,0.0891
+right lower lobe,2,0.0891
+7th rib,2,0.0891
+right lung base,2,0.0891
+right lobe,2,0.0891
+solid,2,0.0891
+large bowel,2,0.0891
+medical process,2,0.0891
+moderate edema,2,0.0891
+anterior to the transverse colon,2,0.0891
+ring enhancing lesion in the left occipital lobe,2,0.0891
+parietal and occipital lobes,2,0.0891
+pres,2,0.0891
+cns,2,0.0891
+cecum,2,0.0891
+mass,2,0.0891
+left apical pneumothorax,2,0.0891
+cardiomegaly,2,0.0891
+sternotomy wires and surgical clips,2,0.0891
+the left kidney,2,0.0891
+medial rectus,2,0.0891
+loculated,2,0.0891
+chest x ray,2,0.0891
+medial and lateral rectus,2,0.0891
+pineal gland,2,0.0891
+cardiac region,2,0.0891
+mr flair,2,0.0891
+left parietal lobe,2,0.0891
+sternal wires,2,0.0891
+right sided aortic arch,2,0.0891
+asymmetric,2,0.0891
+sella and suprasellar cistern,2,0.0891
+oculomotor nerve (cn iii) and trigeminal nerves (cn v),2,0.0891
+pa xray,2,0.0891
+right lateral ventricle,2,0.0891
+upper lobes,2,0.0891
+air fluid level,2,0.0891
+intestine,2,0.0891
+stomach bubble,2,0.0891
+sulcal effacement,2,0.0891
+temporal lobe,2,0.0891
+left occipital lobe,2,0.0891
+elliptical,2,0.0891
+smooth,2,0.0891
+left temporal horn,2,0.0891
+ring-enhancing,2,0.0891
+right side of the trachea,2,0.0891
+abdomen and pelvis,2,0.0891
+mid left subclavian vein,2,0.0891
+cardiomegaly with pulmonary edema,2,0.0891
+head of the pancreas,2,0.0891
+ivc,2,0.0891
+r frontal lobe,2,0.0891
+right lower lateral lung field,2,0.0891
+3.4 cm,2,0.0891
+left thalamus and basal ganglia,2,0.0891
+basilar artery,2,0.0891
+right cerebellopontine angle,2,0.0891
+adipose tissue,2,0.0891
+csf,2,0.0891
+hydrocephalus,2,0.0891
+maxillary sinuses,2,0.0891
+lateral and third ventricular hydrocephalus,2,0.0891
+diverticulitis,2,0.0891
+left aca and mca,2,0.0891
+kidney cyst,2,0.0891
+anterior mediastinum,2,0.0891
+free air,2,0.0891
+motion,2,0.0891
+calcified atherosclerosis,2,0.0891
+soft tissue mass in the region of the terminal ileum with mesenteric lymphadenopathy,2,0.0891
+cavum vergae,2,0.0891
+hypodense lesion,2,0.0891
+appendicitis,2,0.0891
+proximal aspect of the appendix,2,0.0891
+nodular opacities,2,0.0891
+cardiovascular,1,0.0446
+blind loop syndrome,1,0.0446
+blind-ending loop of bowel arising from the cecum,1,0.0446
+mri-dwi,1,0.0446
+iv contrast,1,0.0446
+anterior cerebrum,1,0.0446
+anterior surface,1,0.0446
+pericholecystic fluid,1,0.0446
+vasculature,1,0.0446
+adjacent to vertebrae,1,0.0446
+hip bones,1,0.0446
+multilobulated,1,0.0446
+temporal and lateral occipital lobes,1,0.0446
+mixed intensity,1,0.0446
+on the left,1,0.0446
+4,1,0.0446
+acute stroke,1,0.0446
+decreased muscle bulk,1,0.0446
+6.5 x 6.2 x 8.8cm,1,0.0446
+right vertebral artery sign,1,0.0446
+5cm,1,0.0446
+r hemidiaphragm,1,0.0446
+almost entire right side,1,0.0446
+fluid,1,0.0446
+in the vasculature,1,0.0446
+pons,1,0.0446
+necrotic tissue,1,0.0446
+midline,1,0.0446
+breasts,1,0.0446
+double arch,1,0.0446
+emphysema,1,0.0446
+reduced sulci,1,0.0446
+black,1,0.0446
+man,1,0.0446
+bilateral parietal lobes,1,0.0446
+chronic sinusitis vs. hemorrhage,1,0.0446
+white matter plaques,1,0.0446
+plain film xray,1,0.0446
+short section irregular contour,1,0.0446
+mri diffusion weighted,1,0.0446
+basilar artery thrombosis,1,0.0446
+in the bowel,1,0.0446
+gadolinium,1,0.0446
+in the midline,1,0.0446
+radiolucent,1,0.0446
+hypointense,1,0.0446
+chest radiograph,1,0.0446
+the brain,1,0.0446
+base,1,0.0446
+lower lung fields,1,0.0446
+posterior to the gastric antrum,1,0.0446
+non-contrast,1,0.0446
+portal vein occlusion,1,0.0446
+portal vein,1,0.0446
+nothing,1,0.0446
+all three vascular distributions,1,0.0446
+the lungs,1,0.0446
+head/neck ct,1,0.0446
+biopsy,1,0.0446
+"metastases, infection/abcess, glioblastoma",1,0.0446
+"toxoplasma, lymphoma, abscesses, other brain tumors",1,0.0446
+cancer,1,0.0446
+lentiform,1,0.0446
+biconvex,1,0.0446
+epidural hematoma,1,0.0446
+sinusitis,1,0.0446
+viral,1,0.0446
+parasitic,1,0.0446
+if the heart diameter is greater than half the diameter of the thoracic cavity.,1,0.0446
+c-t ratio,1,0.0446
+bronchiectasis,1,0.0446
+thickening of bronchi,1,0.0446
+csf is brightly lit,1,0.0446
+aorta enhancement,1,0.0446
+costophrenic angle blunting,1,0.0446
+fluid in the pleural space,1,0.0446
+aorta is bright,1,0.0446
+enhancement of vessels,1,0.0446
+genetic,1,0.0446
+crescent,1,0.0446
+concave,1,0.0446
+"quadrantopia, aphasia, memory deficit, etc.",1,0.0446
+"motor weakness, sensory deficits, and left neglect",1,0.0446
+viral/inflammatory,1,0.0446
+cva,1,0.0446
+pituitary fossa,1,0.0446
+location of the contrast?,1,0.0446
+"ruq pain, jaundice,weight loss?",1,0.0446
+abdominal pain,1,0.0446
+air?,1,0.0446
+trace the gallbladder emptying?,1,0.0446
+cystic duct is more tortuous,1,0.0446
+"tumors, gallstones",1,0.0446
+"stones, cancer, infection, anatomic variants",1,0.0446
+plicae circulares,1,0.0446
+more acute means more inflammation-leading to enhancement?,1,0.0446
+less enhancement,1,0.0446
+csf is white.,1,0.0446
+white versus grey matter brightness,1,0.0446
+adenopathy,1,0.0446
+infection,1,0.0446
+not sure.,1,0.0446
+5%,1,0.0446
+"rounded, well-defined pulmonary nodules varying in size and pattern",1,0.0446
+lungs,1,0.0446
+posterior lung seen in the image section,1,0.0446
+pneumothorax,1,0.0446
+both sides,1,0.0446
+exterior,1,0.0446
+outside,1,0.0446
+well-circumscribed,1,0.0446
+exophytic cyst,1,0.0446
+infarcts,1,0.0446
+embolus,1,0.0446
+irregular,1,0.0446
+infiltrative,1,0.0446
+on top of the patient,1,0.0446
+superficial to the patient's skin,1,0.0446
+extraluminal air and small fluid collection,1,0.0446
+extra-axial and at the right choroidal fissure,1,0.0446
+"enlarged, fluid-filled",1,0.0446
+pancreatic body,1,0.0446
+right pca,1,0.0446
+above,1,0.0446
+4th and 5th,1,0.0446
+t5,1,0.0446
+less than half the thorax,1,0.0446
+none,1,0.0446
+superior,1,0.0446
+high on the image,1,0.0446
+periappendiceal fluid and fat stranding,1,0.0446
+heart 	lungs,1,0.0446
+more dense,1,0.0446
+surrounding tissue,1,0.0446
+the surrounding tissue,1,0.0446
+ultrasound,1,0.0446
+in the thorasic aorta,1,0.0446
+width of aorta,1,0.0446
+left lung,1,0.0446
+edematous,1,0.0446
+right lung hilum,1,0.0446
+left hemisphere,1,0.0446
+pacemaker,1,0.0446
+in the right hilum,1,0.0446
+upper right lobe,1,0.0446
+contrast in the intestines,1,0.0446
+left upper lobe,1,0.0446
+lung,1,0.0446
+imaging artifacts,1,0.0446
+posteroanterior,1,0.0446
+it is shifted to the right,1,0.0446
+occipital lobe,1,0.0446
+a bit,1,0.0446
+the posterior horn of the left lateral ventricle,1,0.0446
+infarcted areas,1,0.0446
+just one,1,0.0446
+fat accumulations,1,0.0446
+scoliosis,1,0.0446
+10-20 minutes,1,0.0446
+lungs 	bony thoracic cavit y	mediastinum and great vessels,1,0.0446
+retroperitoneum; retroperitoneal space,1,0.0446
+~15 minutes	potentially faster with newer imaging systems,1,0.0446
+the extremities,1,0.0446
+cxr,1,0.0446
+flair mri,1,0.0446
+left lateral aspect of anterior peritoneum,1,0.0446
+left mid lung,1,0.0446
+"fat stranding around the appendix, thickened appendiceal walls, dilated appendix, and an appendicolith is seen as well",1,0.0446
+ring enhancing lesion in the right frontal lobe,1,0.0446
+right lenticular nucleus,1,0.0446
+3rd rib,1,0.0446
+x-ray plain film,1,0.0446
+respiratory system,1,0.0446
+the abdomen,1,0.0446
+xray - plain film,1,0.0446
+omental caking,1,0.0446
+diffusion weighted imaging (dwi),1,0.0446
+the right frontal lobe,1,0.0446
+the pancreas,1,0.0446
+contrast ct with gi and iv contrast,1,0.0446
+the left costophrenic angle is blunted,1,0.0446
+non-contrast ct,1,0.0446
+the left occipital lobe,1,0.0446
+ct with gi and iv contrast,1,0.0446
+the aorta,1,0.0446
+the aorta and the inferior vena cava,1,0.0446
+imagine the patient is laying down and you are looking from the feet,1,0.0446
+bowel contents light up on image,1,0.0446
+chest xray,1,0.0446
+congenital developmental disorder? history of surgery and past manipulation?,1,0.0446
+respiratory 	cardia c	musculoskeletal,1,0.0446
+csf is white,1,0.0446
+bilateral cerebellum,1,0.0446
+mri - t1 weighted,1,0.0446
+choroid plexus,1,0.0446
+cartilage is not well viewed by x rays,1,0.0446
+lung markings present all the way laterally to the ribs,1,0.0446
+the right mainstem bronchus is more in line with the trachea than the left,1,0.0446
+right pica,1,0.0446
+l2,1,0.0446
+l2-3,1,0.0446
+lateral film as well as pa,1,0.0446
+varicocele,1,0.0446
+posterior brain,1,0.0446
+hypoxic ischemic injury,1,0.0446
+loss of normal gray-white matter junction,1,0.0446
+below the 7th rib in the right lung.,1,0.0446
+single lung nodule,1,0.0446
+not seen here,1,0.0446
+smaller,1,0.0446
+skull 	cartilage and medulla,1,0.0446
+the right bronchus,1,0.0446
+plain film x-ray,1,0.0446
+the small intestines,1,0.0446
+the diaphragm,1,0.0446
+ct with contrast,1,0.0446
+supratentorial,1,0.0446
+t2-mri,1,0.0446
+pulmonary/lymphatic,1,0.0446
+the pancreatic head,1,0.0446
+t2 weighted mri,1,0.0446
+the base of the cecum,1,0.0446
+axial plane,1,0.0446
+the 3rd ventricle and the lateral ventricles,1,0.0446
+abdomen,1,0.0446
+regression of left frontal mass,1,0.0446
+coronal plane?,1,0.0446
+right posteroinferior cerebellum,1,0.0446
+bleeding in the right posteroinferior cerebellum,1,0.0446
+supine (see air-fluid level),1,0.0446
+gallbladder,1,0.0446
+lying supine with their feet towards the screen,1,0.0446
+sacroiliac joint,1,0.0446
+right vs left sided pathology,1,0.0446
+intestines,1,0.0446
+posterior-anterior,1,0.0446
+"caudate, putamen, left parietal",1,0.0446
+diaphragm,1,0.0446
+xr,1,0.0446
+upper left,1,0.0446
+mucosal hyperemia,1,0.0446
+ascending colon,1,0.0446
+mediport,1,0.0446
+5mm,1,0.0446
+plain film,1,0.0446
+frontal and occipital,1,0.0446
+"basal ganglia, cerebellum, cerebral cortex",1,0.0446
+early hemorrhage,1,0.0446
+on the patient's left,1,0.0446
+dwi diffusion weighted,1,0.0446
+"right of the midline, superior to the right hilum",1,0.0446
+2.5cm x 1.7cm x 1.6cm,1,0.0446
+mr-flair,1,0.0446
+hyperinflation,1,0.0446
+t2-weighted,1,0.0446
+ring-enhancing lesions,1,0.0446
+it is less than half the width of the thorax,1,0.0446
+blood vessel,1,0.0446
+above the clavicles bilaterally,1,0.0446
+posterior to the appendix,1,0.0446
+psoas muscle,1,0.0446
+on the right shoulder.,1,0.0446
+a bullous lesion,1,0.0446
