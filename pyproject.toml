@@ -10,6 +10,18 @@ dependencies = [
     "tqdm",
     "matplotlib",
     "seaborn",
+    "torch",
+    "torchvision",
+    "transformers",
+    "peft",
+    "accelerate",
+    "open-clip-torch",
+    "faiss-cpu",
+    "evaluate",
+    "rouge-score",
+    "nltk",
+    "scikit-learn",
+    "bert-score",
 ]
 
 [tool.uv]
