@@ -55,12 +55,11 @@ The code is optimized for hardware configurations with tight VRAM budgets (e.g.,
 ```bash
 uv run metric.py
 ```
-## ================ SUMMARY ================
-| Metric | Closed | Open |
-|-------|----------|------|
-| Accuracy | 0.7251   | NaN  |
-| F1       | 0.7251   | NaN  |
-| BLEU     | NaN      | 0.0733 |
-| ROUGE-L  | NaN      | 0.3503 |
-| BERTScore| NaN      | 0.9032 |
+## ================ SUMMARY ================ 
+| Setting           | Closed Acc | Open BLEU | Open ROUGE-L | Open BERTScore |
+| ----------------- | ---------- | --------- | ------------ | -------------- |
+| Without Retrieval | 0.7251     | 0.0733    | 0.3503       | 0.9032         |
+| With Retrieval    | 0.7131     | 0.0709    | 0.3659       | 0.9025         |
 
+
+[RAG-VQA] Epoch 10 Eval Metrics: EM=0.5011, F1=0.5394, BLEU=0.1012, ROUGE-L=0.5490

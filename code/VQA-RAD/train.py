@@ -2,11 +2,12 @@
 """
 train.py
 
-Generative RAG Medical VQA training script for VQA-RAD.
+Generative mRAG (Multimodal RAG) Medical VQA training script for VQA-RAD.
 Uses:
 - Frozen BiomedCLIP for image-question embedding.
 - FAISS on CPU for retrieval of relevant cases from the training set.
-- Qwen2.5-0.5B-Instruct + LoRA for answer generation.
+- Qwen2-VL-2B-Instruct + LoRA for answer generation.
+- Multi-image mRAG prompt: query image + k retrieved reference images with their Q&A pairs.
 - Evaluation metrics: Exact Match (EM), F1 Score, BLEU, ROUGE-L.
 
 Optimized to run under 7GB VRAM by precomputing embeddings, releasing BiomedCLIP,
@@ -86,69 +87,111 @@ def precompute_embeddings(csv_path, data_dir, model, preprocess, tokenizer, devi
             
     return np.array(embeddings)
 
-# Format retrieved documents
+# Format retrieved documents (text portion)
 def format_retrieved_knowledge(df, indices):
     docs = []
     for rank, idx in enumerate(indices, 1):
         row = df.iloc[idx]
-        docs.append(f"- Question: {row['question']}\n  Answer: {row['answer']}")
+        docs.append(f"Reference Case {rank}:\n  Question: {row['question']}\n  Answer: {row['answer']}")
     return "\n".join(docs)
+
+# Get image paths for retrieved cases
+def get_retrieved_image_paths(df, indices):
+    return [df.iloc[idx]['image_path'] for idx in indices]
 
 # Custom PyTorch Dataset
 class MedVQADataset(Dataset):
-    def __init__(self, df, retrieved_contexts, data_dir, max_length=512):
+    def __init__(self, df, retrieved_contexts, retrieved_image_paths, data_dir, max_length=512):
         self.df = df
         self.retrieved_contexts = retrieved_contexts
+        self.retrieved_image_paths = retrieved_image_paths
         self.data_dir = Path(data_dir)
         self.max_length = max_length
         
     def __len__(self):
         return len(self.df)
+    
+    def _load_image(self, img_path):
+        try:
+            return Image.open(img_path).convert('RGB')
+        except Exception as e:
+            log(f"Warning: failed to load image {img_path}: {e}")
+            return Image.new('RGB', (224, 224), color='black')
         
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         question = row['question']
         context = self.retrieved_contexts[idx]
         answer = row['answer']
-        img_path = self.data_dir / row['image_path']
         
-        try:
-            image = Image.open(img_path).convert('RGB')
-        except Exception as e:
-            image = Image.new('RGB', (224, 224), color='black')
+        # Load query image
+        query_image = self._load_image(self.data_dir / row['image_path'])
+        
+        # Load retrieved mRAG images
+        retrieved_images = [
+            self._load_image(self.data_dir / rp)
+            for rp in self.retrieved_image_paths[idx]
+        ]
             
         return {
-            "image": image,
+            "query_image": query_image,
+            "retrieved_images": retrieved_images,
             "question": question,
             "context": context,
             "answer": answer
         }
 
+# Build multi-image mRAG content for the user message
+def build_mrag_content(query_image, retrieved_images, question, context):
+    """
+    Construct a Qwen2-VL multi-image prompt:
+      [query_image] + question text + [retrieved_image_1] + ref_1 text + ... + answer prompt
+    """
+    content = []
+    
+    # 1) Query image
+    content.append({"type": "image", "image": query_image})
+    content.append({"type": "text", "text": f"This is the query medical image.\n\nQuestion:\n{question}\n\nRetrieved Reference Cases:\n"})
+    
+    # 2) Retrieved images interleaved with their text context
+    context_lines = context.split("Reference Case ")
+    for i, ret_img in enumerate(retrieved_images):
+        content.append({"type": "image", "image": ret_img})
+        # Find the matching reference case text
+        case_text = ""
+        for line in context_lines:
+            if line.startswith(f"{i+1}:"):
+                case_text = line.strip()
+                break
+        content.append({"type": "text", "text": f"Reference Case {case_text}\n"})
+    
+    content.append({"type": "text", "text": "\nBased on the query image and the retrieved reference cases above, provide the answer.\n\nAnswer:\n"})
+    
+    return content
+
+
 # Collate function for dynamic padding using processor
 def get_collate_fn(processor):
     def collate_fn(batch):
-        images = [item['image'] for item in batch]
+        # Collect all images per sample: query + retrieved
+        all_images_per_sample = []
         user_prompts = []
         full_prompts = []
         
         for item in batch:
-            prompt_text = f"Question:\n{item['question']}\n\nRetrieved Knowledge:\n{item['context']}\n\nAnswer:\n"
+            sample_images = [item['query_image']] + item['retrieved_images']
+            all_images_per_sample.append(sample_images)
             
-            user_messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": item['image']},
-                        {"type": "text", "text": prompt_text}
-                    ]
-                }
-            ]
+            mrag_content = build_mrag_content(
+                item['query_image'], item['retrieved_images'],
+                item['question'], item['context']
+            )
+            
+            user_messages = [{"role": "user", "content": mrag_content}]
             full_messages = user_messages + [
                 {
                     "role": "assistant",
-                    "content": [
-                        {"type": "text", "text": str(item['answer'])}
-                    ]
+                    "content": [{"type": "text", "text": str(item['answer'])}]
                 }
             ]
             
@@ -157,15 +200,18 @@ def get_collate_fn(processor):
             
             user_prompts.append(user_p)
             full_prompts.append(full_p)
-            
-        inputs = processor(text=full_prompts, images=images, padding=True, return_tensors="pt")
+        
+        # Flatten all images for the processor (it expects a flat list)
+        flat_images = [img for sample_imgs in all_images_per_sample for img in sample_imgs]
+        
+        inputs = processor(text=full_prompts, images=flat_images, padding=True, return_tensors="pt")
         
         input_ids = inputs['input_ids']
         attention_mask = inputs['attention_mask']
         labels = input_ids.clone()
         
         for i, user_p in enumerate(user_prompts):
-            inputs_user = processor(text=[user_p], images=[images[i]], return_tensors="pt")
+            inputs_user = processor(text=[user_p], images=all_images_per_sample[i], return_tensors="pt")
             user_len = inputs_user['input_ids'].shape[1]
             labels[i, :user_len] = -100
             labels[i, attention_mask[i] == 0] = -100
@@ -201,8 +247,16 @@ def compute_rouge_l(prediction, ground_truth, scorer):
     scores = scorer.score(ground_truth.strip().lower(), prediction.strip().lower())
     return scores['rougeL'].fmeasure
 
+# Helper to load image with fallback
+def _load_image_safe(img_path):
+    try:
+        return Image.open(img_path).convert('RGB')
+    except Exception as e:
+        log(f"Warning: failed to load image {img_path}: {e}")
+        return Image.new('RGB', (224, 224), color='black')
+
 # Evaluation loop
-def evaluate_model(model, processor, test_df, test_contexts, data_dir, scorer, device, desc="Evaluating"):
+def evaluate_model(model, processor, test_df, test_contexts, test_retrieved_image_paths, data_dir, scorer, device, desc="Evaluating"):
     model.eval()
     predictions = []
     
@@ -210,27 +264,23 @@ def evaluate_model(model, processor, test_df, test_contexts, data_dir, scorer, d
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc=desc):
         question = row['question']
         context = test_contexts[idx]
-        img_path = data_dir / row['image_path']
         
-        try:
-            image = Image.open(img_path).convert('RGB')
-        except Exception as e:
-            image = Image.new('RGB', (224, 224), color='black')
-            
-        prompt_text = f"Question:\n{question}\n\nRetrieved Knowledge:\n{context}\n\nAnswer:\n"
+        # Load query image
+        query_image = _load_image_safe(data_dir / row['image_path'])
         
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": image},
-                    {"type": "text", "text": prompt_text}
-                ]
-            }
+        # Load retrieved mRAG images
+        retrieved_images = [
+            _load_image_safe(data_dir / rp)
+            for rp in test_retrieved_image_paths[idx]
         ]
         
+        mrag_content = build_mrag_content(query_image, retrieved_images, question, context)
+        
+        messages = [{"role": "user", "content": mrag_content}]
+        
         prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = processor(text=[prompt], images=[image], return_tensors="pt")
+        all_images = [query_image] + retrieved_images
+        inputs = processor(text=[prompt], images=all_images, return_tensors="pt")
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
         with torch.no_grad():
@@ -362,6 +412,7 @@ def main():
     log(f"Performing RAG retrieval (k={args.k})...")
     # For training data, we query the index but exclude the query sample itself to prevent ground-truth leakage.
     train_contexts = []
+    train_retrieved_img_paths = []
     # Search for k+1 neighbors in training set
     D_train, I_train = index.search(train_features, args.k + 1)
     for idx in range(len(train_df)):
@@ -380,14 +431,17 @@ def main():
                 if len(retrieved_indices) == args.k:
                     break
         train_contexts.append(format_retrieved_knowledge(train_df, retrieved_indices))
+        train_retrieved_img_paths.append(get_retrieved_image_paths(train_df, retrieved_indices))
         
     # For test data, we just retrieve top-k closest from training set
     test_contexts = []
+    test_retrieved_img_paths = []
     D_test, I_test = index.search(test_features, args.k)
     for idx in range(len(test_df)):
         test_contexts.append(format_retrieved_knowledge(train_df, I_test[idx]))
+        test_retrieved_img_paths.append(get_retrieved_image_paths(train_df, I_test[idx]))
         
-    log("RAG retrieval contexts prepared successfully.")
+    log("RAG retrieval contexts (text + image paths) prepared successfully.")
     
     # Step 3: Load Qwen Generator VLM & Apply LoRA
     # ----------------------------------------------------
@@ -439,7 +493,7 @@ def main():
     # ----------------------------------------------------
     # Step 4: Setup Dataset & DataLoader
     # ----------------------------------------------------
-    train_dataset = MedVQADataset(train_df, train_contexts, data_dir, max_length=args.max_length)
+    train_dataset = MedVQADataset(train_df, train_contexts, train_retrieved_img_paths, data_dir, max_length=args.max_length)
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -495,7 +549,7 @@ def main():
         log(f"Epoch {epoch} finished. Average Loss: {avg_loss:.4f}")
         
         # Evaluate model after each epoch
-        metrics, predictions = evaluate_model(model, processor, test_df, test_contexts, data_dir, scorer, device, desc="Test")
+        metrics, predictions = evaluate_model(model, processor, test_df, test_contexts, test_retrieved_img_paths, data_dir, scorer, device, desc="Test")
         log(f"Epoch {epoch} Eval Metrics: EM={metrics['EM']:.4f}, F1={metrics['F1']:.4f}, BLEU={metrics['BLEU']:.4f}, ROUGE-L={metrics['ROUGE-L']:.4f}")
         
         # Save best model
