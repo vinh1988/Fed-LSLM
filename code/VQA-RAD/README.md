@@ -53,33 +53,14 @@ The code is optimized for hardware configurations with tight VRAM budgets (e.g.,
 ## Validation
 
 ```bash
-uv run metrics_cal.py
+uv run metric.py
 ```
-### ==============================
-### CLOSED QUESTIONS
+## ================ SUMMARY ================
+| Metric | Closed | Open |
+|-------|----------|------|
+| Accuracy | 0.7251   | NaN  |
+| F1       | 0.7251   | NaN  |
+| BLEU     | NaN      | 0.0733 |
+| ROUGE-L  | NaN      | 0.3503 |
+| BERTScore| NaN      | 0.9032 |
 
-Samples  : 251
-Accuracy : 0.6614
-
-### OPEN QUESTIONS
-
-Samples    : 200
-EM         : 0.1900
-F1         : 0.2756
-BLEU       : 0.0578
-ROUGE-L    : 0.2853
-BERTScore  : 0.8878
-
-### OVERALL
-
-Samples    : 451
-EM         : 0.4523
-F1         : 0.4903
-BERTScore  : 0.9347
-
-### PAPER TABLE
-
-| Split  | Accuracy | BLEU | ROUGE-L | F1 | BERTScore |
-|-------|----------|------|---------|----|-----------|
-| Closed | 0.6614   | NaN  | NaN     | NaN| NaN       |
-| Open   | 0.1900   | 0.0578 | 0.2853 | 0.2756 | 0.8878 |

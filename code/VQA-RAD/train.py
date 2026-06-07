@@ -29,8 +29,9 @@ from collections import Counter
 
 import open_clip
 from transformers import (
-    AutoTokenizer, 
-    AutoModelForCausalLM, 
+    AutoProcessor,
+    Qwen2VLForConditionalGeneration,
+    BitsAndBytesConfig,
     get_linear_schedule_with_warmup
 )
 from peft import LoraConfig, get_peft_model, TaskType
@@ -95,10 +96,10 @@ def format_retrieved_knowledge(df, indices):
 
 # Custom PyTorch Dataset
 class MedVQADataset(Dataset):
-    def __init__(self, df, retrieved_contexts, tokenizer, max_length=512):
+    def __init__(self, df, retrieved_contexts, data_dir, max_length=512):
         self.df = df
         self.retrieved_contexts = retrieved_contexts
-        self.tokenizer = tokenizer
+        self.data_dir = Path(data_dir)
         self.max_length = max_length
         
     def __len__(self):
@@ -109,53 +110,68 @@ class MedVQADataset(Dataset):
         question = row['question']
         context = self.retrieved_contexts[idx]
         answer = row['answer']
+        img_path = self.data_dir / row['image_path']
         
-        prompt = f"Question:\n{question}\n\nRetrieved Knowledge:\n{context}\n\nAnswer:\n"
-        
-        # Tokenize prompt and target answer
-        prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=False)
-        answer_ids = self.tokenizer.encode(str(answer), add_special_tokens=False) + [self.tokenizer.eos_token_id]
-        
-        input_ids = prompt_ids + answer_ids
-        labels = [-100] * len(prompt_ids) + answer_ids
-        
-        # Truncate if exceeds max_length
-        if len(input_ids) > self.max_length:
-            input_ids = input_ids[:self.max_length]
-            labels = labels[:self.max_length]
+        try:
+            image = Image.open(img_path).convert('RGB')
+        except Exception as e:
+            image = Image.new('RGB', (224, 224), color='black')
             
-        attention_mask = [1] * len(input_ids)
-        
         return {
-            "input_ids": input_ids,
-            "labels": labels,
-            "attention_mask": attention_mask
+            "image": image,
+            "question": question,
+            "context": context,
+            "answer": answer
         }
 
-# Collate function for dynamic padding
-def get_collate_fn(tokenizer):
+# Collate function for dynamic padding using processor
+def get_collate_fn(processor):
     def collate_fn(batch):
-        input_ids = [item['input_ids'] for item in batch]
-        labels = [item['labels'] for item in batch]
-        attention_mask = [item['attention_mask'] for item in batch]
+        images = [item['image'] for item in batch]
+        user_prompts = []
+        full_prompts = []
         
-        max_len = max(len(x) for x in input_ids)
-        
-        padded_input_ids = []
-        padded_labels = []
-        padded_attention_mask = []
-        
-        for ids, labs, mask in zip(input_ids, labels, attention_mask):
-            pad_len = max_len - len(ids)
-            padded_input_ids.append(ids + [tokenizer.pad_token_id] * pad_len)
-            padded_labels.append(labs + [-100] * pad_len)
-            padded_attention_mask.append(mask + [0] * pad_len)
+        for item in batch:
+            prompt_text = f"Question:\n{item['question']}\n\nRetrieved Knowledge:\n{item['context']}\n\nAnswer:\n"
             
-        return {
-            'input_ids': torch.tensor(padded_input_ids),
-            'labels': torch.tensor(padded_labels),
-            'attention_mask': torch.tensor(padded_attention_mask)
-        }
+            user_messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": item['image']},
+                        {"type": "text", "text": prompt_text}
+                    ]
+                }
+            ]
+            full_messages = user_messages + [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": str(item['answer'])}
+                    ]
+                }
+            ]
+            
+            user_p = processor.apply_chat_template(user_messages, tokenize=False, add_generation_prompt=True)
+            full_p = processor.apply_chat_template(full_messages, tokenize=False, add_generation_prompt=False)
+            
+            user_prompts.append(user_p)
+            full_prompts.append(full_p)
+            
+        inputs = processor(text=full_prompts, images=images, padding=True, return_tensors="pt")
+        
+        input_ids = inputs['input_ids']
+        attention_mask = inputs['attention_mask']
+        labels = input_ids.clone()
+        
+        for i, user_p in enumerate(user_prompts):
+            inputs_user = processor(text=[user_p], images=[images[i]], return_tensors="pt")
+            user_len = inputs_user['input_ids'].shape[1]
+            labels[i, :user_len] = -100
+            labels[i, attention_mask[i] == 0] = -100
+            
+        inputs['labels'] = labels
+        return inputs
     return collate_fn
 
 # Evaluation metric helpers
@@ -186,33 +202,49 @@ def compute_rouge_l(prediction, ground_truth, scorer):
     return scores['rougeL'].fmeasure
 
 # Evaluation loop
-def evaluate_model(model, tokenizer, test_df, test_contexts, scorer, device):
+def evaluate_model(model, processor, test_df, test_contexts, data_dir, scorer, device, desc="Evaluating"):
     model.eval()
     predictions = []
     
-    log("Running generation on test set...")
-    for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc="Evaluating"):
+    log(f"Running generation on {desc} set...")
+    for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc=desc):
         question = row['question']
         context = test_contexts[idx]
+        img_path = data_dir / row['image_path']
         
-        prompt = f"Question:\n{question}\n\nRetrieved Knowledge:\n{context}\n\nAnswer:\n"
+        try:
+            image = Image.open(img_path).convert('RGB')
+        except Exception as e:
+            image = Image.new('RGB', (224, 224), color='black')
+            
+        prompt_text = f"Question:\n{question}\n\nRetrieved Knowledge:\n{context}\n\nAnswer:\n"
         
-        inputs = tokenizer(prompt, return_tensors="pt").to(device)
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": prompt_text}
+                ]
+            }
+        ]
+        
+        prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        inputs = processor(text=[prompt], images=[image], return_tensors="pt")
+        inputs = {k: v.to(device) for k, v in inputs.items()}
         
         with torch.no_grad():
             output_ids = model.generate(
                 **inputs,
                 max_new_tokens=64,
-                pad_token_id=tokenizer.pad_token_id,
-                eos_token_id=tokenizer.eos_token_id,
-                do_sample=False,
-                temperature=1.0,
-                top_p=1.0
+                pad_token_id=processor.tokenizer.pad_token_id,
+                eos_token_id=processor.tokenizer.eos_token_id,
+                do_sample=False
             )
             
         # Decode only the generated part
         prompt_len = inputs['input_ids'].shape[1]
-        gen_text = tokenizer.decode(output_ids[0][prompt_len:], skip_special_tokens=True).strip()
+        gen_text = processor.tokenizer.decode(output_ids[0][prompt_len:], skip_special_tokens=True).strip()
         predictions.append(gen_text)
         
     # Calculate metrics
@@ -241,8 +273,8 @@ def main():
     parser = argparse.ArgumentParser(description="Train Generative RAG Med-VQA on VQA-RAD")
     parser.add_argument("--data_dir", type=str, default="processed_data/VQA-RAD/centralized",
                         help="Path to centralized VQA-RAD dataset folder")
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-0.5B-Instruct",
-                        help="Generator LLM model path/name on HF")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2-VL-2B-Instruct",
+                        help="Generator VLM model path/name on HF")
     parser.add_argument("--biomed_model_name", type=str, default="hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224",
                         help="BiomedCLIP model checkpoint")
     parser.add_argument("--output_dir", type=str, default="code/VQA-RAD/results",
@@ -251,9 +283,9 @@ def main():
                         help="Number of retrieved cases to include as knowledge context")
     parser.add_argument("--epochs", type=int, default=5,
                         help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=4,
+    parser.add_argument("--batch_size", type=int, default=1,
                         help="Batch size for training")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=2,
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=8,
                         help="Gradient accumulation steps")
     parser.add_argument("--lr", type=float, default=2e-4,
                         help="Learning rate for LoRA training")
@@ -357,22 +389,39 @@ def main():
         
     log("RAG retrieval contexts prepared successfully.")
     
+    # Step 3: Load Qwen Generator VLM & Apply LoRA
     # ----------------------------------------------------
-    # Step 3: Load Qwen Generator LLM & Apply LoRA
-    # ----------------------------------------------------
-    log(f"Loading tokenizer & LLM: {args.model_name}...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-        
     # Set model dtype to float16 / bfloat16 to fit under VRAM limit
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    base_model = AutoModelForCausalLM.from_pretrained(
+    log(f"Loading processor & VLM: {args.model_name}...")
+    # Constrain image resolution to reduce vision token count and VRAM usage
+    processor = AutoProcessor.from_pretrained(
         args.model_name,
+        min_pixels=128*28*28,
+        max_pixels=256*28*28
+    )
+    processor.tokenizer.padding_side = "right"
+    if processor.tokenizer.pad_token is None:
+        processor.tokenizer.pad_token = processor.tokenizer.eos_token
+    
+    # 4-bit quantization to drastically reduce memory footprint
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch_dtype,
+        bnb_4bit_use_double_quant=True
+    )
+        
+    base_model = Qwen2VLForConditionalGeneration.from_pretrained(
+        args.model_name,
+        quantization_config=bnb_config,
         torch_dtype=torch_dtype,
         device_map="auto"
     )
+    
+    # Enable gradient checkpointing to trade compute for memory
+    base_model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     
     # PEFT LoRA configuration
     peft_config = LoraConfig(
@@ -390,12 +439,12 @@ def main():
     # ----------------------------------------------------
     # Step 4: Setup Dataset & DataLoader
     # ----------------------------------------------------
-    train_dataset = MedVQADataset(train_df, train_contexts, tokenizer, max_length=args.max_length)
+    train_dataset = MedVQADataset(train_df, train_contexts, data_dir, max_length=args.max_length)
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        collate_fn=get_collate_fn(tokenizer)
+        collate_fn=get_collate_fn(processor)
     )
     
     # Scorer for Rouge
@@ -423,15 +472,9 @@ def main():
         
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch}/{args.epochs}")
         for step, batch in enumerate(progress_bar):
-            input_ids = batch['input_ids'].to(device)
-            labels = batch['labels'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
+            batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
             
-            outputs = model(
-                input_ids=input_ids,
-                labels=labels,
-                attention_mask=attention_mask
-            )
+            outputs = model(**batch)
             
             loss = outputs.loss
             loss = loss / args.gradient_accumulation_steps
@@ -452,7 +495,7 @@ def main():
         log(f"Epoch {epoch} finished. Average Loss: {avg_loss:.4f}")
         
         # Evaluate model after each epoch
-        metrics, predictions = evaluate_model(model, tokenizer, test_df, test_contexts, scorer, device)
+        metrics, predictions = evaluate_model(model, processor, test_df, test_contexts, data_dir, scorer, device, desc="Test")
         log(f"Epoch {epoch} Eval Metrics: EM={metrics['EM']:.4f}, F1={metrics['F1']:.4f}, BLEU={metrics['BLEU']:.4f}, ROUGE-L={metrics['ROUGE-L']:.4f}")
         
         # Save best model
