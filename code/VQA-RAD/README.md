@@ -62,4 +62,9 @@ uv run metric.py
 | With Retrieval    | 0.7131     | 0.0709    | 0.3659       | 0.9025         |
 
 
-[RAG-VQA] Epoch 10 Eval Metrics: EM=0.5011, F1=0.5394, BLEU=0.1012, ROUGE-L=0.5490
+================ SUMMARY ================
+Closed Acc   : 0.7371
+Closed F1    : 0.7371
+Open BLEU    : 0.0750
+Open ROUGE-L : 0.3362
+Open BERTS   : 0.8987

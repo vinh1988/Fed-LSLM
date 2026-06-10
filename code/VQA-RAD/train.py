@@ -88,12 +88,14 @@ def precompute_embeddings(csv_path, data_dir, model, preprocess, tokenizer, devi
     return np.array(embeddings)
 
 # Format retrieved documents (text portion)
-def format_retrieved_knowledge(df, indices):
+def format_retrieved_knowledge(df, indices, scores=None):
     docs = []
-    for rank, idx in enumerate(indices, 1):
+    if scores is None:
+        scores = [0.0] * len(indices)
+    for rank, (idx, score) in enumerate(zip(indices, scores), 1):
         row = df.iloc[idx]
-        docs.append(f"Reference Case {rank}:\n  Question: {row['question']}\n  Answer: {row['answer']}")
-    return "\n".join(docs)
+        docs.append(f"Top-{rank}:\nScore: {score:.4f}\nQuestion: {row['question']}\nAnswer: {row['answer']}\n")
+    return docs
 
 # Get image paths for retrieved cases
 def get_retrieved_image_paths(df, indices):
@@ -124,48 +126,65 @@ class MedVQADataset(Dataset):
         context = self.retrieved_contexts[idx]
         answer = row['answer']
         
+        # Determine question type
+        q_type_raw = str(row.get('question_type', 'open')).lower()
+        question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
+        
         # Load query image
         query_image = self._load_image(self.data_dir / row['image_path'])
-        
-        # Load retrieved mRAG images
-        retrieved_images = [
-            self._load_image(self.data_dir / rp)
-            for rp in self.retrieved_image_paths[idx]
-        ]
             
         return {
             "query_image": query_image,
-            "retrieved_images": retrieved_images,
             "question": question,
+            "question_type": question_type,
             "context": context,
             "answer": answer
         }
 
 # Build multi-image mRAG content for the user message
-def build_mrag_content(query_image, retrieved_images, question, context):
+def build_mrag_content(query_image, question, question_type, context_list):
     """
-    Construct a Qwen2-VL multi-image prompt:
-      [query_image] + question text + [retrieved_image_1] + ref_1 text + ... + answer prompt
+    Construct a Qwen2-VL mRAG prompt:
+      [query_image] + question text + context + answer prompt
     """
     content = []
     
-    # 1) Query image
+    # 1) System and Image
+    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
     content.append({"type": "image", "image": query_image})
-    content.append({"type": "text", "text": f"This is the query medical image.\n\nQuestion:\n{question}\n\nRetrieved Reference Cases:\n"})
     
-    # 2) Retrieved images interleaved with their text context
-    context_lines = context.split("Reference Case ")
-    for i, ret_img in enumerate(retrieved_images):
-        content.append({"type": "image", "image": ret_img})
-        # Find the matching reference case text
-        case_text = ""
-        for line in context_lines:
-            if line.startswith(f"{i+1}:"):
-                case_text = line.strip()
-                break
-        content.append({"type": "text", "text": f"Reference Case {case_text}\n"})
+    # 2) Question and Question Type
+    k = len(context_list)
+    q_text = (
+        f"\n\nQuestion:\n{question}\n\n"
+        f"Question Type:\n{question_type}\n\n"
+        f"Retrieved Medical Evidence (Top-{k} QA cases ranked by similarity score):\n\n"
+    )
+    content.append({"type": "text", "text": q_text})
     
-    content.append({"type": "text", "text": "\nBased on the query image and the retrieved reference cases above, provide the answer.\n\nAnswer:\n"})
+    # 3) Retrieved text context
+    for case_text in context_list:
+        content.append({"type": "text", "text": case_text + "\n"})
+    
+    # 4) Instruction and rules
+    instruction = (
+        "Instruction:\n"
+        "You must adapt your reasoning based on the question type.\n\n"
+        "- If the question is CLOSED-ENDED (Yes/No only):\n"
+        "  • The final answer MUST be \"yes\" or \"no\"\n"
+        "  • Focus primarily on the image\n"
+        "  • Use retrieved QA cases only if they strongly match the visual evidence\n\n"
+        "- If the question is OPEN-ENDED:\n"
+        "  • Use both the image and retrieved QA cases\n"
+        "  • Combine visual evidence with similar QA examples to improve reasoning and completeness\n\n"
+        "General rules:\n"
+        "- Retrieved cases are ranked by similarity score (higher score = more relevant)\n"
+        "- Ignore low-score or irrelevant retrieved cases\n"
+        "- Do not output reasoning steps\n"
+        "- Output only the final answer\n\n"
+        "Answer:\n"
+    )
+    content.append({"type": "text", "text": instruction})
     
     return content
 
@@ -179,12 +198,12 @@ def get_collate_fn(processor):
         full_prompts = []
         
         for item in batch:
-            sample_images = [item['query_image']] + item['retrieved_images']
+            sample_images = [item['query_image']]
             all_images_per_sample.append(sample_images)
             
             mrag_content = build_mrag_content(
-                item['query_image'], item['retrieved_images'],
-                item['question'], item['context']
+                item['query_image'],
+                item['question'], item['question_type'], item['context']
             )
             
             user_messages = [{"role": "user", "content": mrag_content}]
@@ -265,21 +284,19 @@ def evaluate_model(model, processor, test_df, test_contexts, test_retrieved_imag
         question = row['question']
         context = test_contexts[idx]
         
+        # Determine question type
+        q_type_raw = str(row.get('question_type', 'open')).lower()
+        question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
+        
         # Load query image
         query_image = _load_image_safe(data_dir / row['image_path'])
         
-        # Load retrieved mRAG images
-        retrieved_images = [
-            _load_image_safe(data_dir / rp)
-            for rp in test_retrieved_image_paths[idx]
-        ]
-        
-        mrag_content = build_mrag_content(query_image, retrieved_images, question, context)
+        mrag_content = build_mrag_content(query_image, question, question_type, context)
         
         messages = [{"role": "user", "content": mrag_content}]
         
         prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        all_images = [query_image] + retrieved_images
+        all_images = [query_image]
         inputs = processor(text=[prompt], images=all_images, return_tensors="pt")
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
@@ -331,7 +348,7 @@ def main():
                         help="Directory to save the checkpoints and predictions")
     parser.add_argument("--k", type=int, default=3,
                         help="Number of retrieved cases to include as knowledge context")
-    parser.add_argument("--epochs", type=int, default=5,
+    parser.add_argument("--epochs", type=int, default=10,
                         help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=1,
                         help="Batch size for training")
@@ -417,20 +434,23 @@ def main():
     D_train, I_train = index.search(train_features, args.k + 1)
     for idx in range(len(train_df)):
         retrieved_indices = []
-        for match_idx in I_train[idx]:
+        retrieved_scores = []
+        for match_idx_pos, match_idx in enumerate(I_train[idx]):
             if match_idx == idx:
                 continue
             retrieved_indices.append(match_idx)
+            retrieved_scores.append(D_train[idx][match_idx_pos])
             if len(retrieved_indices) == args.k:
                 break
         # Fallback if somehow len < k
         if len(retrieved_indices) < args.k:
-            for match_idx in I_train[idx]:
+            for match_idx_pos, match_idx in enumerate(I_train[idx]):
                 if match_idx not in retrieved_indices:
                     retrieved_indices.append(match_idx)
+                    retrieved_scores.append(D_train[idx][match_idx_pos])
                 if len(retrieved_indices) == args.k:
                     break
-        train_contexts.append(format_retrieved_knowledge(train_df, retrieved_indices))
+        train_contexts.append(format_retrieved_knowledge(train_df, retrieved_indices, retrieved_scores))
         train_retrieved_img_paths.append(get_retrieved_image_paths(train_df, retrieved_indices))
         
     # For test data, we just retrieve top-k closest from training set
@@ -438,7 +458,7 @@ def main():
     test_retrieved_img_paths = []
     D_test, I_test = index.search(test_features, args.k)
     for idx in range(len(test_df)):
-        test_contexts.append(format_retrieved_knowledge(train_df, I_test[idx]))
+        test_contexts.append(format_retrieved_knowledge(train_df, I_test[idx], D_test[idx]))
         test_retrieved_img_paths.append(get_retrieved_image_paths(train_df, I_test[idx]))
         
     log("RAG retrieval contexts (text + image paths) prepared successfully.")
@@ -560,7 +580,7 @@ def main():
             
             # Save predictions
             results_df = test_df.copy()
-            results_df['retrieved_knowledge'] = test_contexts
+            results_df['retrieved_knowledge'] = ["\n".join(ctx) for ctx in test_contexts]
             results_df['prediction'] = predictions
             results_df['EM'] = [compute_exact_match(p, r.answer) for p, r in zip(predictions, test_df.itertuples())]
             results_df['F1'] = [compute_f1(p, r.answer) for p, r in zip(predictions, test_df.itertuples())]
