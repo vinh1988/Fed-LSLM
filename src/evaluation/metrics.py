@@ -138,6 +138,7 @@ def compute_metrics(
     open_em = _exact_match(open_preds, open_refs)
     open_bleu = _corpus_bleu1(open_preds, open_refs)
     open_rouge = _mean_rouge_l(open_preds, open_refs)
+    open_f1 = _mean_token_f1(open_preds, open_refs)
 
     return {
         "overall_exact_match": overall_em,
@@ -146,6 +147,7 @@ def compute_metrics(
         "open_exact_match": open_em,
         "open_bleu": open_bleu,
         "open_rouge_l": open_rouge,
+        "open_f1": open_f1,
         "n_total": n_total,
         "n_closed": n_closed,
         "n_open": n_open,
@@ -198,6 +200,7 @@ def aggregate_metrics(
             "open_exact_match": 0.0,
             "open_bleu": 0.0,
             "open_rouge_l": 0.0,
+            "open_f1": 0.0,
             "n_total": 0,
             "n_closed": 0,
             "n_open": 0,
@@ -219,6 +222,7 @@ def aggregate_metrics(
         "open_exact_match": _wavg("open_exact_match", "n_open", total_open),
         "open_bleu": _wavg("open_bleu", "n_open", total_open),
         "open_rouge_l": _wavg("open_rouge_l", "n_open", total_open),
+        "open_f1": _wavg("open_f1", "n_open", total_open),
         "n_total": total_n,
         "n_closed": total_closed,
         "n_open": total_open,
@@ -293,3 +297,78 @@ def _mean_rouge_l(predictions: list[str], references: list[str]) -> float:
         score = scorer.score(normalize_answer(ref), normalize_answer(pred))
         total += score["rougeL"].fmeasure
     return total / len(predictions)
+
+
+# ---------------------------------------------------------------------------
+# BERTScore (optional — requires `bert_score` package)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_BERTSCORE_MODEL = "distilbert-base-uncased"
+
+
+def compute_bertscore(
+    predictions: list[str],
+    references: list[str],
+    model_type: str | None = None,
+    device: str = "cuda",
+) -> dict[str, float | str]:
+    """Compute BERTScore (Precision, Recall, F1) over prediction–reference pairs.
+
+    Args:
+        predictions: Model-generated answers (open-ended only).
+        references: Ground-truth answers.
+        model_type: HuggingFace model name for BERTScore.
+            Defaults to ``distilbert-base-uncased`` (light, Kaggle-friendly).
+        device: ``"cuda"`` or ``"cpu"``.
+
+    Returns:
+        Dict with ``bertscore_precision``, ``bertscore_recall``,
+        ``bertscore_f1``, and ``bertscore_model``.
+    """
+    if not predictions:
+        return {
+            "bertscore_precision": 0.0,
+            "bertscore_recall": 0.0,
+            "bertscore_f1": 0.0,
+            "bertscore_model": model_type or _DEFAULT_BERTSCORE_MODEL,
+        }
+
+    try:
+        from bert_score import score as bert_score_fn  # type: ignore
+    except ImportError:
+        logger.warning(
+            "bert_score not installed. Install with: pip install bert-score. "
+            "Returning zeros."
+        )
+        return {
+            "bertscore_precision": 0.0,
+            "bertscore_recall": 0.0,
+            "bertscore_f1": 0.0,
+            "bertscore_model": "NOT_INSTALLED",
+        }
+
+    model_type = model_type or _DEFAULT_BERTSCORE_MODEL
+
+    # Normalize answers consistently with other metrics
+    norm_preds = [normalize_answer(p) for p in predictions]
+    norm_refs = [normalize_answer(r) for r in references]
+
+    logger.info(
+        "Computing BERTScore over %d samples with model=%s on %s ...",
+        len(norm_preds), model_type, device,
+    )
+
+    P, R, F1 = bert_score_fn(
+        norm_preds, norm_refs,
+        model_type=model_type,
+        device=device,
+        verbose=False,
+        batch_size=64,
+    )
+
+    return {
+        "bertscore_precision": round(P.mean().item(), 4),
+        "bertscore_recall": round(R.mean().item(), 4),
+        "bertscore_f1": round(F1.mean().item(), 4),
+        "bertscore_model": model_type,
+    }

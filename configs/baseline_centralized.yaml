@@ -1,0 +1,32 @@
+# PathVQA Centralized Baseline Training Config
+
+# Data paths
+data_root: "processed_data/PathVQA/raw"
+train_csv: "processed_data/PathVQA/raw/train.csv"
+val_csv:   "processed_data/PathVQA/raw/validation.csv"
+test_csv:  "processed_data/PathVQA/raw/test.csv"
+
+# Model hyperparameters
+image_encoder_name: "microsoft/swin-tiny-patch4-window7-224"
+text_encoder_name:  "bert-base-uncased"
+freeze_encoders:    true
+dropout:            0.1
+open_vocab_size:    1500
+
+# Training hyperparameters
+num_epochs:                  20
+batch_size:                  4
+learning_rate:               1.0e-4
+weight_decay:                1.0e-4
+warmup_steps:                100
+gradient_clip:               1.0
+gradient_accumulation_steps: 1
+log_every:                   50
+save_best:                   true
+monitor_metric:              "val_score"
+patience:                    5
+device:                      "mps"
+num_workers:                 0
+
+# Output paths
+output_dir: "outputs/centralized_no_rag"

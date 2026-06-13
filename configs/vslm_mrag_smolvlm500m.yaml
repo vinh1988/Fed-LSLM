@@ -1,0 +1,35 @@
+# V-SLM mRAG Config — SmolVLM-500M-Instruct (VQA-RAD)
+
+# Data paths (Kaggle)
+data_root: processed_data/VQA-RAD/centralized
+train_csv: processed_data/VQA-RAD/centralized/train.csv
+val_csv:   processed_data/VQA-RAD/centralized/validation.csv
+test_csv:  processed_data/VQA-RAD/centralized/test.csv
+
+# Retrieval (frozen)
+index_dir: outputs/mrag/vqa_rad_index
+top_k: 3
+
+# V-SLM
+model_name: HuggingFaceTB/SmolVLM-500M-Instruct
+case: text_image     # text_only | text_image
+max_new_tokens: 32
+
+# LoRA
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+use_4bit: false      # First try fp16 without 4-bit
+
+# Training
+epochs: 1
+batch_size: 1
+gradient_accumulation_steps: 8
+lr: 2.0e-5
+max_length: 2048
+warmup_ratio: 0.03
+
+# Output
+sft_jsonl: outputs/vslm_mrag/sft/vqa_rad_train_text_image_top3_full_filterqt.jsonl
+output_dir: outputs/vslm_mrag/smolvlm_lora_text_image_top3
+device: cuda

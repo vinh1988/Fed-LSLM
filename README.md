@@ -277,6 +277,169 @@ VQA-RAD_heatmap_alpha_0.1_k5.png
 
 ---
 
+## Experiment Results — PathVQA Centralized Baselines
+
+### Comparison Table
+
+| Method | Closed Acc | Open EM | Open BLEU-1 | Open ROUGE-L | Notes |
+|---|---|---|---|---|---|
+| Classifier (vocab3000, 15ep) | 0.8415 | 0.3065 | 0.1337 | 0.3208 | Fixed-vocab, Swin+BERT frozen |
+| Classifier + no-UNK decoding | 0.8415 | 0.3101 | 0.1591 | 0.3288 | Same checkpoint, skip `<unk>` |
+| **mRAG BiomedCLIP+FAISS+Qwen2.5-0.5B** | 0.7072 | 0.2594 | 0.1838 | 0.2899 | Zero-shot, top-5 retrieval |
+| **mRAG retrieval-only (top-1)** | TBD | TBD | TBD | TBD | Baseline for RAG quality |
+| **V-SLM mRAG Qwen2.5-VL-3B LoRA (text-only)** | TBD | TBD | TBD | TBD | SFT, top-5 retrieved text |
+| **V-SLM mRAG Qwen2.5-VL-3B LoRA (text+image)** | TBD | TBD | TBD | TBD | SFT, top-5 retrieved text+image |
+
+### mRAG Pipeline Commands
+
+#### Step 1 — Build FAISS Index
+```bash
+# Local (CPU, smoke test with 200 samples)
+python scripts/build_mrag_index.py \
+    --train-csv processed_data/PathVQA/raw/train.csv \
+    --data-root processed_data/PathVQA/raw \
+    --output-dir outputs/mrag/index \
+    --encoder biomedclip \
+    --batch-size 8 \
+    --device cpu \
+    --max-samples 200
+
+# Kaggle (full, GPU)
+python scripts/build_mrag_index.py \
+    --train-csv /kaggle/input/datasets/lekimquang/pathvqa/raw/train.csv \
+    --data-root /kaggle/input/datasets/lekimquang/pathvqa/raw \
+    --output-dir outputs/mrag/index \
+    --encoder biomedclip \
+    --batch-size 32 \
+    --device cuda
+```
+
+#### Step 2 — Smoke Test (20 samples)
+```bash
+python scripts/evaluate_mrag.py \
+    --eval-csv processed_data/PathVQA/raw/validation.csv \
+    --data-root processed_data/PathVQA/raw \
+    --index-dir outputs/mrag/index \
+    --output-dir outputs/mrag/debug_val20 \
+    --top-k 5 \
+    --max-samples 20 \
+    --mode generation \
+    --device cpu
+```
+
+#### Step 3 — Retrieval-Only Baseline
+```bash
+python scripts/evaluate_mrag.py \
+    --eval-csv processed_data/PathVQA/raw/test.csv \
+    --data-root processed_data/PathVQA/raw \
+    --index-dir outputs/mrag/index \
+    --output-dir outputs/mrag/retrieval_only_top1/test \
+    --top-k 5 \
+    --mode retrieval_only \
+    --filter-by-question-type \
+    --device cuda
+```
+
+#### Step 4 — Full Generation Evaluation
+```bash
+python scripts/evaluate_mrag.py \
+    --eval-csv processed_data/PathVQA/raw/test.csv \
+    --data-root processed_data/PathVQA/raw \
+    --index-dir outputs/mrag/index \
+    --output-dir outputs/mrag/centralized_qwen05b_top5/test \
+    --top-k 5 \
+    --mode generation \
+    --generator qwen2.5-0.5b \
+    --filter-by-question-type \
+    --device cuda
+```
+
+---
+
+### V-SLM mRAG Pipeline Commands (Qwen2.5-VL-3B + LoRA)
+
+#### Dependencies (Kaggle)
+```bash
+pip install peft bitsandbytes accelerate qwen-vl-utils open_clip_torch faiss-cpu
+```
+
+#### Step 1 — Build SFT Dataset
+```bash
+# Smoke test (100 samples)
+python scripts/build_vslm_mrag_sft_dataset.py \
+    --csv /kaggle/input/datasets/lekimquang/pathvqa/raw/train.csv \
+    --data-root /kaggle/input/datasets/lekimquang/pathvqa/raw \
+    --index-dir outputs/mrag/index \
+    --output-jsonl outputs/vslm_mrag/sft/debug_train_text_only_top5_100.jsonl \
+    --top-k 5 --case text_only \
+    --exclude-self --exclude-same-image \
+    --max-samples 100 --device cuda
+```
+
+#### Step 2 — Validate Dataset
+```bash
+python scripts/check_vslm_sft_dataset.py \
+    --jsonl outputs/vslm_mrag/sft/debug_train_text_only_top5_100.jsonl \
+    --num-samples 3
+```
+
+#### Step 3 — Tiny LoRA Training (smoke test)
+```bash
+python scripts/train_qwen_vl_lora.py \
+    --model-name Qwen/Qwen2.5-VL-3B-Instruct \
+    --train-jsonl outputs/vslm_mrag/sft/debug_train_text_only_top5_100.jsonl \
+    --output-dir outputs/vslm_mrag/debug_qwen25vl3b_lora_100 \
+    --epochs 1 --batch-size 1 \
+    --gradient-accumulation-steps 8 \
+    --use-4bit --device cuda
+```
+
+#### Step 4 — Tiny Eval (smoke test)
+```bash
+python scripts/evaluate_vslm_mrag.py \
+    --model-name Qwen/Qwen2.5-VL-3B-Instruct \
+    --adapter-path outputs/vslm_mrag/debug_qwen25vl3b_lora_100 \
+    --eval-csv /kaggle/input/datasets/lekimquang/pathvqa/raw/validation.csv \
+    --data-root /kaggle/input/datasets/lekimquang/pathvqa/raw \
+    --index-dir outputs/mrag/index \
+    --output-dir outputs/vslm_mrag/debug_eval_val20 \
+    --top-k 5 --case text_only \
+    --max-samples 20 --device cuda --use-4bit
+```
+
+#### Full Training (after smoke passes)
+```bash
+# Build full SFT dataset
+python scripts/build_vslm_mrag_sft_dataset.py \
+    --csv /kaggle/input/datasets/lekimquang/pathvqa/raw/train.csv \
+    --data-root /kaggle/input/datasets/lekimquang/pathvqa/raw \
+    --index-dir outputs/mrag/index \
+    --output-jsonl outputs/vslm_mrag/sft/train_text_only_top5.jsonl \
+    --top-k 5 --case text_only \
+    --exclude-self --exclude-same-image --device cuda
+
+# Train full LoRA
+python scripts/train_qwen_vl_lora.py \
+    --model-name Qwen/Qwen2.5-VL-3B-Instruct \
+    --train-jsonl outputs/vslm_mrag/sft/train_text_only_top5.jsonl \
+    --output-dir outputs/vslm_mrag/qwen25vl3b_lora_text_only_top5 \
+    --epochs 1 --batch-size 1 \
+    --gradient-accumulation-steps 8 \
+    --use-4bit --device cuda
+
+# Evaluate validation
+python scripts/evaluate_vslm_mrag.py \
+    --model-name Qwen/Qwen2.5-VL-3B-Instruct \
+    --adapter-path outputs/vslm_mrag/qwen25vl3b_lora_text_only_top5 \
+    --eval-csv /kaggle/input/datasets/lekimquang/pathvqa/raw/validation.csv \
+    --data-root /kaggle/input/datasets/lekimquang/pathvqa/raw \
+    --index-dir outputs/mrag/index \
+    --output-dir outputs/vslm_mrag/qwen25vl3b_lora_text_only_top5_val \
+    --top-k 5 --case text_only --device cuda --use-4bit
+```
+
+---
+
 ## Intended Research Usage
 
 This dataset organization supports:

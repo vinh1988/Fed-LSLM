@@ -1,0 +1,42 @@
+# V-SLM mRAG Config — Qwen2.5-VL-3B-Instruct + LoRA
+# PathVQA Centralized Multimodal RAG
+
+# ── Data paths (Kaggle) ─────────────────────────────────────────────────────
+data_root: "/kaggle/input/datasets/lekimquang/pathvqa/raw"
+train_csv: "/kaggle/input/datasets/lekimquang/pathvqa/raw/train.csv"
+val_csv:   "/kaggle/input/datasets/lekimquang/pathvqa/raw/validation.csv"
+test_csv:  "/kaggle/input/datasets/lekimquang/pathvqa/raw/test.csv"
+
+# ── Retrieval (frozen BiomedCLIP + FAISS) ────────────────────────────────────
+index_dir: "outputs/mrag/index"
+top_k: 5
+case: "text_only"         # text_only | text_image
+
+# ── V-SLM Model ─────────────────────────────────────────────────────────────
+model_name: "Qwen/Qwen2.5-VL-3B-Instruct"
+max_new_tokens: 32
+
+# ── LoRA Configuration ──────────────────────────────────────────────────────
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+use_4bit: true
+
+# ── Training Hyperparameters ─────────────────────────────────────────────────
+epochs: 1
+batch_size: 1
+gradient_accumulation_steps: 8
+lr: 2.0e-5
+max_length: 2048
+warmup_ratio: 0.03
+max_grad_norm: 1.0
+seed: 42
+
+# ── Anti-leakage ─────────────────────────────────────────────────────────────
+exclude_self: true
+exclude_same_image: true
+
+# ── Output Paths ─────────────────────────────────────────────────────────────
+sft_jsonl: "outputs/vslm_mrag/sft/train_text_only_top5.jsonl"
+output_dir: "outputs/vslm_mrag/qwen25vl3b_lora_text_only_top5"
+device: "cuda"

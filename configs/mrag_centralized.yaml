@@ -1,0 +1,29 @@
+# PathVQA Centralized mRAG Config
+
+# ── Data paths ──────────────────────────────────────────────────────────────
+data_root: "processed_data/PathVQA/raw"
+train_csv: "processed_data/PathVQA/raw/train.csv"
+val_csv:   "processed_data/PathVQA/raw/validation.csv"
+test_csv:  "processed_data/PathVQA/raw/test.csv"
+
+# ── Index settings ───────────────────────────────────────────────────────────
+index_dir: "outputs/mrag/index"
+encoder: "biomedclip"          # biomedclip | clip
+embedding_dim: 512             # will be overridden from index_config.json
+top_k: 5
+filter_by_question_type: false # true = closed queries retrieve from closed only
+
+# ── Generator settings ───────────────────────────────────────────────────────
+mode: "generation"             # generation | retrieval_only
+generator: "qwen2.5-0.5b"     # alias → Qwen/Qwen2.5-0.5B-Instruct
+qwen_model: "Qwen/Qwen2.5-0.5B-Instruct"
+max_new_tokens: 32
+temperature: 0.0               # 0.0 = greedy decode
+
+# ── Runtime ──────────────────────────────────────────────────────────────────
+device: "cuda"                 # cuda | mps | cpu
+batch_size: 32                 # for index building only
+
+# ── Output paths ─────────────────────────────────────────────────────────────
+index_output_dir: "outputs/mrag/index"
+eval_output_dir:  "outputs/mrag/centralized_qwen05b_top5"
