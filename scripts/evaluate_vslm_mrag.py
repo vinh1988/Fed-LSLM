@@ -409,6 +409,11 @@ def run_inference(
         inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v
                   for k, v in inputs.items()}
 
+        # SmolVLM (transformers 5.x): pixel_attention_mask is not accepted by generate()
+        # because _validate_model_kwargs is stricter in v5. Remove it from the dict.
+        if model_family == "smolvlm":
+            inputs.pop("pixel_attention_mask", None)
+
         input_len = inputs["input_ids"].shape[1]
 
         # Generate
