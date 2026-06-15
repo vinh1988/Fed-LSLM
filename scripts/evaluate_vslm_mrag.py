@@ -110,8 +110,12 @@ def detect_model_family(model_name: str) -> str:
 def _get_model_class(family: str):
     """Import and return the correct model class for the given family."""
     if family == "smolvlm":
-        from transformers import AutoModelForVision2Seq
-        return AutoModelForVision2Seq
+        try:
+            from transformers import AutoModelForVision2Seq
+            return AutoModelForVision2Seq
+        except ImportError:
+            from transformers import Idefics3ForConditionalGeneration
+            return Idefics3ForConditionalGeneration
     elif family == "qwen2_5_vl":
         from transformers import Qwen2_5_VLForConditionalGeneration
         return Qwen2_5_VLForConditionalGeneration
@@ -142,6 +146,10 @@ def load_model_and_processor(args: argparse.Namespace):
             args.adapter_path,
             trust_remote_code=True,
         )
+        # Disable image tiling: 4 images × ~1000 tokens (tiled) = 4000+ tokens > max_length
+        if hasattr(processor, "image_processor") and hasattr(processor.image_processor, "do_image_splitting"):
+            processor.image_processor.do_image_splitting = False
+            logger.info("SmolVLM: do_image_splitting=False (prevents token explosion)")
     else:
         processor = AutoProcessor.from_pretrained(
             args.adapter_path,
@@ -549,14 +557,7 @@ def print_summary(metrics: dict, args: argparse.Namespace) -> None:
 def main() -> None:
     args = parse_args()
 
-    # Resolve Kaggle paths
-    kaggle_raw = Path("/kaggle/input/datasets/lekimquang/pathvqa/raw")
-    if not Path(args.eval_csv).exists() and kaggle_raw.exists():
-        logger.info("Local eval CSV not found — falling back to Kaggle paths.")
-        csv_name = Path(args.eval_csv).name
-        args.eval_csv = str(kaggle_raw / csv_name)
-        args.data_root = str(kaggle_raw)
-
+    # Resolve Kaggle paths (VQA-RAD only — skip PathVQA fallback)
     output_dir = Path(args.output_dir)
     data_root = Path(args.data_root)
 
