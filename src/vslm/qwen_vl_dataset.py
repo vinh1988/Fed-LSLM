@@ -149,31 +149,54 @@ class VLMSFTDataset(Dataset):
         )
 
         # --- Tokenize full conversation ---
-        full_inputs = self.processor(
-            text=[full_text],
-            images=image_inputs if image_inputs else None,
-            return_tensors="pt",
-            padding=False,
-            truncation=True,
-            max_length=self.max_length,
-        )
+        # NOTE: For SmolVLM (Idefics3), passing truncation=True causes a mismatch
+        # between image token count in the text template and in input_ids after truncation.
+        # Solution: disable truncation in processor, then manually truncate tensors afterwards.
+        if self.model_family == "smolvlm":
+            full_inputs = self.processor(
+                text=[full_text],
+                images=image_inputs if image_inputs else None,
+                return_tensors="pt",
+                padding=False,
+            )
+            prompt_inputs = self.processor(
+                text=[prompt_text],
+                images=image_inputs if image_inputs else None,
+                return_tensors="pt",
+                padding=False,
+            )
+        else:
+            # --- Tokenize full conversation ---
+            full_inputs = self.processor(
+                text=[full_text],
+                images=image_inputs if image_inputs else None,
+                return_tensors="pt",
+                padding=False,
+                truncation=True,
+                max_length=self.max_length,
+            )
 
-        # --- Tokenize prompt only (to find where answer starts) ---
-        prompt_inputs = self.processor(
-            text=[prompt_text],
-            images=image_inputs if image_inputs else None,
-            return_tensors="pt",
-            padding=False,
-            truncation=True,
-            max_length=self.max_length,
-        )
+            # --- Tokenize prompt only (to find where answer starts) ---
+            prompt_inputs = self.processor(
+                text=[prompt_text],
+                images=image_inputs if image_inputs else None,
+                return_tensors="pt",
+                padding=False,
+                truncation=True,
+                max_length=self.max_length,
+            )
 
         input_ids = full_inputs["input_ids"].squeeze(0)  # (seq_len,)
         attention_mask = full_inputs["attention_mask"].squeeze(0)
 
+        # For SmolVLM: manually truncate to max_length after processing
+        if self.model_family == "smolvlm" and input_ids.size(0) > self.max_length:
+            input_ids = input_ids[: self.max_length]
+            attention_mask = attention_mask[: self.max_length]
+
         # --- Build labels: mask prompt tokens with -100 ---
         labels = input_ids.clone()
-        prompt_len = prompt_inputs["input_ids"].shape[1]
+        prompt_len = min(prompt_inputs["input_ids"].shape[1], self.max_length)
         labels[:prompt_len] = -100
 
         # Also mask any padding tokens

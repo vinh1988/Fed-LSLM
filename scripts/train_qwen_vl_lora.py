@@ -434,6 +434,7 @@ def main() -> None:
         processor=processor,
         max_length=args.max_length,
         max_samples=effective_max_samples,
+        model_family=model_family,  # Pass explicitly to avoid auto-detection failure
     )
 
     pad_token_id = getattr(processor.tokenizer, "pad_token_id", None)
