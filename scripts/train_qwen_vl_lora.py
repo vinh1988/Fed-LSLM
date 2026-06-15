@@ -163,6 +163,11 @@ def load_model_and_processor(args: argparse.Namespace):
             args.model_name,
             trust_remote_code=True,
         )
+        # Disable image tiling: 4 images × ~1000 tokens (tiled) = 4000+ tokens > max_length.
+        # With do_image_splitting=False: ~64-189 tokens/image × 4 images = ~256-756 tokens total.
+        if hasattr(processor, "image_processor") and hasattr(processor.image_processor, "do_image_splitting"):
+            processor.image_processor.do_image_splitting = False
+            logger.info("SmolVLM: do_image_splitting=False (prevents token explosion from image tiling)")
     else:
         processor = AutoProcessor.from_pretrained(
             args.model_name,
