@@ -126,8 +126,13 @@ def detect_model_family(model_name: str) -> str:
 def _get_model_class(family: str):
     """Import and return the correct model class for the given family."""
     if family == "smolvlm":
-        from transformers import AutoModelForVision2Seq
-        return AutoModelForVision2Seq
+        try:
+            from transformers import AutoModelForVision2Seq
+            return AutoModelForVision2Seq
+        except ImportError:
+            # Older transformers versions don't have AutoModelForVision2Seq
+            from transformers import Idefics3ForConditionalGeneration
+            return Idefics3ForConditionalGeneration
     elif family == "qwen2_5_vl":
         from transformers import Qwen2_5_VLForConditionalGeneration
         return Qwen2_5_VLForConditionalGeneration
