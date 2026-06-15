@@ -31,31 +31,31 @@ def preprocess_messages_for_vlm(messages: list[dict], model_family: str) -> tupl
     processed_messages = []
 
     if model_family == "smolvlm":
-        # SmolVLM chat template expects {"type": "image"} placeholders
+        # SmolVLM chat template expects list of dicts: [{"type": "text", "text": ...}, {"type": "image"}]
         for msg in messages:
             role = msg["role"]
             content = msg["content"]
 
-            if role == "system":
-                processed_messages.append({"role": "system", "content": content})
-            elif role in ("user", "assistant"):
-                if isinstance(content, str):
-                    processed_messages.append({"role": role, "content": content})
-                elif isinstance(content, list):
-                    new_content = []
-                    for item in content:
-                        if item.get("type") == "image":
-                            img_path = item.get("image")
-                            if img_path:
-                                try:
-                                    img = Image.open(img_path).convert("RGB")
-                                    images.append(img)
-                                except Exception as e:
-                                    logger.error("Failed to load image %s: %s", img_path, e)
-                            new_content.append({"type": "image"})
-                        else:
-                            new_content.append(item)
-                    processed_messages.append({"role": role, "content": new_content})
+            if isinstance(content, str):
+                processed_messages.append({
+                    "role": role,
+                    "content": [{"type": "text", "text": content}]
+                })
+            elif isinstance(content, list):
+                new_content = []
+                for item in content:
+                    if item.get("type") == "image":
+                        img_path = item.get("image")
+                        if img_path:
+                            try:
+                                img = Image.open(img_path).convert("RGB")
+                                images.append(img)
+                            except Exception as e:
+                                logger.error("Failed to load image %s: %s", img_path, e)
+                        new_content.append({"type": "image"})
+                    else:
+                        new_content.append(item)
+                processed_messages.append({"role": role, "content": new_content})
         return processed_messages, images
     else:
         # Qwen2-VL / Qwen2.5-VL
