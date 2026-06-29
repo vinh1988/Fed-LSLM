@@ -4,7 +4,7 @@
 
 Continue fine-tuning on the VQA-RAD dataset using the ROCO-trained adapter.
 Reuses the centralized VQA-RAD training approach (zero-shot non-icl),
-but instead of initializing a fresh LoRA adapter, it loads `global_adapter_roco`.
+but instead of initializing a fresh LoRA adapter, it loads `global_adapter_roco_slake`.
 uv run federated_code/04_train_vqarad_continue.py --k 2 --epochs 1
 
 """
@@ -292,12 +292,12 @@ def resolve_data_paths(dataset: str, setting: str, alpha, k: int, client_id: int
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--global_adapter_roco", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter_roco")
+    parser.add_argument("--global_adapter_roco_slake", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter_roco_slake")
     parser.add_argument("--dataset", type=str, default="VQA-RAD")
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--grad_accum", type=int, default=8)
     parser.add_argument("--lr", type=float, default=2e-4)
@@ -310,7 +310,7 @@ def main():
     set_seed(args.seed)
     
     log("Starting VQA-RAD continued training for ALL clients...")
-    log(f"ROCO adapter: {args.global_adapter_roco}")
+    log(f"ROCO adapter: {args.global_adapter_roco_slake}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     gpu_static = get_gpu_static_info()
@@ -338,8 +338,8 @@ def main():
     )
 
     # 2. Load ROCO-trained Adapter (global initialization state)
-    log(f"Loading pretrained ROCO adapter from {args.global_adapter_roco}...")
-    model = PeftModel.from_pretrained(base_model, args.global_adapter_roco, is_trainable=True)
+    log(f"Loading pretrained ROCO adapter from {args.global_adapter_roco_slake}...")
+    model = PeftModel.from_pretrained(base_model, args.global_adapter_roco_slake, is_trainable=True)
     model.print_trainable_parameters()
 
     # 3. Save a deep copy of the global adapter weights

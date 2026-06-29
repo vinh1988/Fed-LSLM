@@ -5,7 +5,12 @@ from pathlib import Path
 import pandas as pd
 import torch
 from datasets import load_dataset
-from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+# from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+from transformers import (
+    AutoProcessor,
+    Qwen2_5_VLForConditionalGeneration,
+    BitsAndBytesConfig,
+)
 
 # =====================================================
 # CONFIG
@@ -24,7 +29,9 @@ OUT_DIR = Path(
 )
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-MAX_NEW_TOKENS = 512
+# MAX_NEW_TOKENS = 512
+
+MAX_NEW_TOKENS = 192
 
 # Output CSVs for each split
 SPLITS_CONFIG = {
@@ -64,7 +71,9 @@ for split_name in SPLITS_CONFIG:
 # =====================================================
 # LOAD MODEL
 # =====================================================
-
+quantization_config = BitsAndBytesConfig(
+    load_in_8bit=True,
+)
 print("Loading Qwen2.5-VL...")
 
 processor = AutoProcessor.from_pretrained(
@@ -72,14 +81,29 @@ processor = AutoProcessor.from_pretrained(
     cache_dir=CACHE_DIR
 )
 
+# model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+#     MODEL_NAME,
+#     torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+#     device_map="auto",
+#     cache_dir=CACHE_DIR
+# )
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     MODEL_NAME,
-    torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+    quantization_config=quantization_config,
     device_map="auto",
-    cache_dir=CACHE_DIR
+    cache_dir=CACHE_DIR,
 )
-
 model.eval()
+
+if torch.cuda.is_available():
+    num_gpus = torch.cuda.device_count()
+    gpu_names = [torch.cuda.get_device_name(i) for i in range(num_gpus)]
+    print(f"Device: CUDA ({num_gpus} GPU(s))")
+    for i, name in enumerate(gpu_names):
+        mem = torch.cuda.get_device_properties(i).total_memory / (1024**3)
+        print(f"  GPU {i}: {name} | VRAM: {mem:.1f} GB")
+else:
+    print("Device: CPU")
 
 print("Model ready.")
 
@@ -141,7 +165,9 @@ Focus only on visible evidence.
         return_tensors="pt"
     )
 
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    # inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    device = next(model.parameters()).device
+    inputs = {k: v.to(device) for k, v in inputs.items()}   
 
     with torch.no_grad():
         outputs = model.generate(

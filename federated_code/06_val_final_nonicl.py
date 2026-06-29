@@ -18,6 +18,7 @@ from peft import PeftModel
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 import bert_score
+from sentence_transformers import SentenceTransformer, util
 
 # ── Cache & Globals ──────────────────────────────────────────────────────────
 CACHE_DIR = r"D:\nckh_teacher_student\code\teacher_student\.hf_cache"
@@ -26,6 +27,9 @@ os.environ["HF_DATASETS_CACHE"] = os.path.join(CACHE_DIR, "datasets")
 os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(CACHE_DIR, "hub")
 
 MODEL_NAME = "Qwen/Qwen2.5-VL-3B-Instruct"
+
+# Load medical embedding model for hallucination detection
+similarity_model = SentenceTransformer('NeuML/pubmedbert-base-embeddings')
 
 def log(msg: str):
     print(f"[VAL-FINAL] {msg}", flush=True)
@@ -84,13 +88,52 @@ def compute_bert_score(preds: list, gts: list) -> float:
     P, R, F1 = bert_score.score(preds, gts, lang="en", verbose=False)
     return float(F1.mean())
 
+def evaluate_fast_hallucination(qa_type: str, gt: str, prediction: str, threshold: float = 0.85) -> int:
+    """
+    Lightning-fast hallucination detection using local embedding similarity.
+    
+    Args:
+        qa_type (str): 'close-ended' or 'open-ended'.
+        gt (str): Ground truth string.
+        prediction (str): Model prediction string.
+        threshold (float): Similarity index above which text is deemed accurate.
+                           0.85 is recommended for medical synonyms.
+    """
+    gt_clean = gt.strip().lower()
+    pred_clean = prediction.strip().lower()
+
+    # 1. Close-Ended (Exact matching remains the fastest method possible)
+    if qa_type.lower() == 'close-ended':
+        return 0 if gt_clean == pred_clean else 1
+
+    # 2. Open-Ended (Vector Similarity Match)
+    elif qa_type.lower() == 'open-ended':
+        if gt_clean == pred_clean:
+            return 0
+            
+        # Encode both sentences into medical vector embeddings
+        emb_gt = similarity_model.encode(gt_clean, convert_to_tensor=True)
+        emb_pred = similarity_model.encode(pred_clean, convert_to_tensor=True)
+        
+        # Calculate Cosine Similarity
+        similarity_score = util.cos_sim(emb_gt, emb_pred).item()
+        
+        # If similarity is high, they are medical synonyms -> No Hallucination (0)
+        # If similarity is low -> Hallucination (1)
+        return 0 if similarity_score >= threshold else 1
+    
+    else:
+        raise ValueError("qa_type must be 'close-ended' or 'open-ended'")
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--global_adapter_final", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter_final")
+    # parser.add_argument("--global_adapter_final", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter")
     parser.add_argument("--test_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\VQA-RAD\centralized\test.csv")
     parser.add_argument("--image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\VQA-RAD\centralized")
     parser.add_argument("--out_dir", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\final_val")
+    # parser.add_argument("--out_dir", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter")
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -192,14 +235,27 @@ def main():
     o_rouge = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_bert = compute_bert_score(open_preds, open_gts) if open_preds else 0.0
 
+    # Compute hallucination rate using embedding similarity
+    log("Computing hallucination rate...")
+    hallucination_count = 0
+    total_count = 0
+    
+    # Closed-ended hallucinations
+    for p, g in zip(closed_preds, closed_gts):
+        hallucination_count += evaluate_fast_hallucination('close-ended', g, p)
+        total_count += 1
+    
+    # Open-ended hallucinations
+    for p, g in zip(open_preds, open_gts):
+        hallucination_count += evaluate_fast_hallucination('open-ended', g, p)
+        total_count += 1
+    
+    hallucination_rate = hallucination_count / total_count if total_count > 0 else 0.0
+
     metrics_payload = {
         "closed-ended": {
             "n_samples": len(closed_preds),
-            "Accuracy": round(c_acc, 6),
-            "Exact Match": round(c_em, 6),
-            "BLEU": round(c_bleu, 6),
-            "ROUGE-L": round(c_rouge, 6),
-            "BERTScore": round(c_bert, 6)
+            "Accuracy": round(c_acc, 6)
         },
         "open-ended": {
             "n_samples": len(open_preds),
@@ -208,6 +264,9 @@ def main():
             "BLEU": round(o_bleu, 6),
             "ROUGE-L": round(o_rouge, 6),
             "BERTScore": round(o_bert, 6)
+        },
+        "hallucination": {
+            "Hallucination Rate": round(hallucination_rate, 6)
         },
         "performance": {
             "inference_time_s": round(total_time, 2),

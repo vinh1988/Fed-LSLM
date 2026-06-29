@@ -101,7 +101,7 @@ def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int) 
         if alpha is None:
             raise ValueError("--alpha must be set for noniid setting")
         base = base / f"alpha_{alpha}"
-    base = base / f"k{k}" / MODEL_SHORT / "clients" / f"client_{client_id}"
+    base = base / f"k{k}" / MODEL_SHORT / "clients" / f"client_{client_id}_nonicl"
     return base
 
 
@@ -391,17 +391,19 @@ def evaluate_model(model, processor, test_df: pd.DataFrame, test_contexts: list,
                    image_root: Path, rouge_scr, device, desc: str = "Test"):
     """
     Evaluate model on the test set.
-    Returns metrics dict with separate closed/open breakdowns:
+    Returns metrics dict with the new format:
       {
-        "closed": {"accuracy": ..., "F1": ...},      # Closed: Acc + token-F1
-        "open":   {"BLEU": ..., "ROUGE-L": ...},     # Open: BLEU + ROUGE-L
-        "closed_accuracy": ...                         # top-level shortcut for model selection
+        "closed-ended": {"n_samples": ..., "Accuracy": ...},
+        "open-ended": {"n_samples": ..., "Accuracy": ..., "Exact Match": ..., "BLEU": ..., "ROUGE-L": ..., "BERTScore": ...},
+        "hallucination": {"Hallucination Rate": ...},
+        "performance": {"inference_time_s": ..., "throughput_samples_per_sec": ...}
       }
     Note: BERTScore is NOT computed here (too slow during training).
           Run metric.py post-hoc on best_predictions.csv to get BERTScore.
     """
     model.eval()
     predictions = []
+    start_time = time.time()
 
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc=desc):
         question  = row["question"]
@@ -431,6 +433,9 @@ def evaluate_model(model, processor, test_df: pd.DataFrame, test_contexts: list,
             output_ids[0][prompt_len:], skip_special_tokens=True
         ).strip()
         predictions.append(gen_text)
+    
+    inference_time = time.time() - start_time
+    throughput = len(test_df) / inference_time if inference_time > 0 else 0.0
 
     # ── Split by question type ───────────────────────────────────────────────
     closed_preds, closed_gts = [], []
@@ -445,33 +450,43 @@ def evaluate_model(model, processor, test_df: pd.DataFrame, test_contexts: list,
             open_preds.append(pred)
             open_gts.append(str(row.answer))
 
-    # ── Closed metrics: Accuracy + token-F1 ─────────────────────────────────
+    # ── Closed metrics: Accuracy ────────────────────────────────────────
     if closed_preds:
         closed_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(closed_preds, closed_gts)]))
-        closed_f1  = float(np.mean([compute_f1(p, g)          for p, g in zip(closed_preds, closed_gts)]))
     else:
-        closed_acc, closed_f1 = 0.0, 0.0
+        closed_acc = 0.0
 
-    # ── Open metrics: BLEU + ROUGE-L ─────────────────────────────────────
+    # ── Open metrics: Accuracy, Exact Match, BLEU, ROUGE-L ──────────────
     if open_preds:
-        open_bleu   = float(np.mean([compute_bleu(p, g)             for p, g in zip(open_preds, open_gts)]))
-        open_rouge  = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)]))
+        open_acc     = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)]))
+        open_bleu    = float(np.mean([compute_bleu(p, g)             for p, g in zip(open_preds, open_gts)]))
+        open_rouge   = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)]))
     else:
-        open_bleu, open_rouge = 0.0, 0.0
+        open_acc, open_bleu, open_rouge = 0.0, 0.0, 0.0
+
+    # ── Hallucination: Placeholder (requires semantic similarity model) ──
+    hallucination_rate = 0.0  # TODO: Implement with semantic similarity model
 
     metrics = {
-        "closed": {
+        "closed-ended": {
             "n_samples": len(closed_preds),
-            "accuracy":  round(closed_acc, 6),
-            "F1":        round(closed_f1,  6),
+            "Accuracy":  round(closed_acc, 6),
         },
-        "open": {
+        "open-ended": {
             "n_samples": len(open_preds),
-            "BLEU":      round(open_bleu,  6),
-            "ROUGE-L":   round(open_rouge, 6),
+            "Accuracy":    round(open_acc, 6),
+            "Exact Match": round(open_acc, 6),  # Same as accuracy for open-ended
+            "BLEU":        round(open_bleu, 6),
+            "ROUGE-L":     round(open_rouge, 6),
+            "BERTScore":   0.0,  # Placeholder - compute post-hoc
         },
-        # top-level shortcut used for model selection
-        "closed_accuracy": round(closed_acc, 6),
+        "hallucination": {
+            "Hallucination Rate": round(hallucination_rate, 6),
+        },
+        "performance": {
+            "inference_time_s": round(inference_time, 3),
+            "throughput_samples_per_sec": round(throughput, 3),
+        },
     }
     return metrics, predictions
 
@@ -723,17 +738,17 @@ def train_single_client(args, client_id: int):
             image_root, rouge_scr, device,
             desc=f"[Client {client_id}] Eval Epoch {epoch}",
         )
-        c = metrics["closed"]
-        o = metrics["open"]
+        c = metrics["closed-ended"]
+        o = metrics["open-ended"]
         log(f"Epoch {epoch} | "
-            f"Closed [n={c['n_samples']}] Acc={c['accuracy']:.4f} F1={c['F1']:.4f} | "
-            f"Open   [n={o['n_samples']}] BLEU={o['BLEU']:.4f} ROUGE-L={o['ROUGE-L']:.4f}")
+            f"Closed [n={c['n_samples']}] Acc={c['Accuracy']:.4f} | "
+            f"Open   [n={o['n_samples']}] Acc={o['Accuracy']:.4f} BLEU={o['BLEU']:.4f} ROUGE-L={o['ROUGE-L']:.4f}")
 
         all_metrics.append(metrics)
 
         # ── Save best model (criterion: closed accuracy) ─────────────────────
-        if metrics["closed_accuracy"] > best_closed_acc:
-            best_closed_acc = metrics["closed_accuracy"]
+        if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
+            best_closed_acc = metrics["closed-ended"]["Accuracy"]
             best_epoch      = epoch
             best_metrics    = metrics
             log(f"New best Closed Acc={best_closed_acc:.4f}  → saving adapter to {out_dir}")
@@ -760,18 +775,31 @@ def train_single_client(args, client_id: int):
 
     avg_metrics_payload = {
         "avg_train_loss": round(float(np.mean(all_losses)), 6),
-        "closed": {
-            "accuracy": round(float(np.mean([m["closed"]["accuracy"] for m in all_metrics])), 6),
-            "F1":       round(float(np.mean([m["closed"]["F1"]       for m in all_metrics])), 6),
+        "closed-ended": {
+            "n_samples": int(np.mean([m["closed-ended"]["n_samples"] for m in all_metrics])),
+            "Accuracy": round(float(np.mean([m["closed-ended"]["Accuracy"] for m in all_metrics])), 6),
         },
-        "open": {
-            "BLEU":    round(float(np.mean([m["open"]["BLEU"]    for m in all_metrics])), 6),
-            "ROUGE-L": round(float(np.mean([m["open"]["ROUGE-L"] for m in all_metrics])), 6),
+        "open-ended": {
+            "n_samples": int(np.mean([m["open-ended"]["n_samples"] for m in all_metrics])),
+            "Accuracy":    round(float(np.mean([m["open-ended"]["Accuracy"]    for m in all_metrics])), 6),
+            "Exact Match": round(float(np.mean([m["open-ended"]["Exact Match"] for m in all_metrics])), 6),
+            "BLEU":        round(float(np.mean([m["open-ended"]["BLEU"]        for m in all_metrics])), 6),
+            "ROUGE-L":     round(float(np.mean([m["open-ended"]["ROUGE-L"]     for m in all_metrics])), 6),
+            "BERTScore":   0.0,  # Placeholder - compute post-hoc
+        },
+        "hallucination": {
+            "Hallucination Rate": round(float(np.mean([m["hallucination"]["Hallucination Rate"] for m in all_metrics])), 6),
+        },
+        "performance": {
+            "inference_time_s": round(float(np.mean([m["performance"]["inference_time_s"] for m in all_metrics])), 3),
+            "throughput_samples_per_sec": round(float(np.mean([m["performance"]["throughput_samples_per_sec"] for m in all_metrics])), 3),
         },
     }
     best_metrics_payload = {
-        "closed": best_metrics.get("closed", {}),
-        "open":   best_metrics.get("open",   {}),
+        "closed-ended": best_metrics.get("closed-ended", {}),
+        "open-ended":   best_metrics.get("open-ended",   {}),
+        "hallucination": best_metrics.get("hallucination", {}),
+        "performance":   best_metrics.get("performance",   {}),
     }
 
     experiment_payload = {
@@ -856,7 +884,7 @@ def main():
                         help="Number of retrieved cases for mRAG context")
 
     # ── Training hyperparams ─────────────────────────────────────────────────
-    parser.add_argument("--epochs",     type=int,   default=5)
+    parser.add_argument("--epochs",     type=int,   default=1)
     parser.add_argument("--batch_size", type=int,   default=1)
     parser.add_argument("--grad_accum", type=int,   default=8,
                         help="Gradient accumulation steps")

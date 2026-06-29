@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-03_train_roco.py
+03_train_kd_roco_slake.py
 
-Continue training the FedAvg global LoRA adapter on the ROCO reasoning dataset.
+Continue training the FedAvg global LoRA adapter on unified reasoning dataset (ROCO + Slake).
 
 Pipeline:
 Base Qwen2.5-VL-3B
     -> Load server/global_adapter
-    -> Continue supervised LoRA training on ROCO reasoning
-    -> Save server/global_adapter_roco
-uv run federated_code/03_train_roco.py
+    -> Continue supervised LoRA training on ROCO (caption-based) + Slake (QA-based) reasoning
+    -> Save server/global_adapter_roco_slake
+
+ROCO: Open-ended caption reasoning
+Slake: Closed-ended Yes/No question reasoning
+
+uv run federated_code/03_train_kd_roco_slake.py
 """
 
 import os
@@ -82,22 +86,68 @@ def sample_gpu_memory_gb() -> float:
 # Dataset & collate
 # ──────────────────────────────────────────────────────────────────────────────
 
-class ROCODataset(Dataset):
-    def __init__(self, hf_dataset, df_reasoning):
-        self.hf_dataset = hf_dataset
-        self.df_reasoning = df_reasoning.reset_index(drop=True)
+class UnifiedReasoningDataset(Dataset):
+    def __init__(self, df_roco=None, df_slake=None, roco_image_root=None, slake_image_root=None):
+        """
+        Unified dataset for ROCO (caption-based) and Slake (QA-based) reasoning.
+        
+        Args:
+            df_roco: ROCO DataFrame with columns: image_id, caption, reasoning
+            df_slake: Slake DataFrame with columns: img_id, img_name, question, answer, reasoning
+            roco_image_root: Path to ROCO images
+            slake_image_root: Path to Slake images (extracted imgs.zip)
+        """
+        self.samples = []
+        
+        # Add ROCO samples
+        if df_roco is not None and roco_image_root is not None:
+            df_roco = df_roco.dropna(subset=['image_id']).reset_index(drop=True)
+            for _, row in df_roco.iterrows():
+                image_id = row["image_id"]
+                numeric_id = image_id.split("_")[-1]
+                image_path = Path(roco_image_root) / f"{numeric_id}.jpg"
+                self.samples.append({
+                    "type": "roco",
+                    "image_path": image_path,
+                    "caption": row["caption"],
+                    "reasoning": row["reasoning"],
+                })
+        
+        # Add Slake samples
+        if df_slake is not None and slake_image_root is not None:
+            df_slake = df_slake.dropna(subset=['img_name']).reset_index(drop=True)
+            for _, row in df_slake.iterrows():
+                img_name = row["img_name"]
+                image_path = Path(slake_image_root) / "imgs" / img_name
+                self.samples.append({
+                    "type": "slake",
+                    "image_path": image_path,
+                    "question": row["question"],
+                    "answer": row["answer"],
+                    "reasoning": row["reasoning"],
+                })
+        
+        log(f"Loaded {len(self.samples)} total samples (ROCO: {sum(1 for s in self.samples if s['type']=='roco')}, Slake: {sum(1 for s in self.samples if s['type']=='slake')})")
 
     def __len__(self):
-        return len(self.df_reasoning)
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        sample = self.hf_dataset[idx]
-        row = self.df_reasoning.iloc[idx]
+        sample = self.samples[idx]
+        
+        try:
+            image = Image.open(sample["image_path"]).convert("RGB")
+        except Exception as e:
+            print(f"Warning: Failed to load {sample['image_path']}: {e}")
+            image = Image.new("RGB", (224, 224), color="black")
         
         return {
-            "image": sample["image"].convert("RGB"),
-            "caption": row["caption"],
-            "reasoning": row["reasoning"],
+            "image": image,
+            "type": sample["type"],
+            "caption": sample.get("caption", ""),
+            "question": sample.get("question", ""),
+            "answer": sample.get("answer", ""),
+            "reasoning": sample["reasoning"],
         }
 
 def get_collate_fn(processor):
@@ -110,11 +160,23 @@ def get_collate_fn(processor):
             all_images_per_sample.append([item["image"]])
 
             system_prompt = "You are a professional radiologist."
-            user_text = (
-                f"Medical Caption:\n{item['caption']}\n\n"
-                f"Task:\nExplain step-by-step why this caption matches the image.\n"
-                f"Focus only on visible evidence."
-            )
+            
+            # Build different prompts based on data type
+            if item["type"] == "roco":
+                # ROCO: Caption-based reasoning
+                user_text = (
+                    f"Medical Caption:\n{item['caption']}\n\n"
+                    f"Task:\nExplain step-by-step why this caption matches the image.\n"
+                    f"Focus only on visible evidence."
+                )
+            else:
+                # Slake: QA-based reasoning (closed-ended Yes/No)
+                user_text = (
+                    f"Question:\n{item['question']}\n\n"
+                    f"Answer:\n{item['answer']}\n\n"
+                    f"Task:\nExplain step-by-step why this answer is correct for the question.\n"
+                    f"Focus only on visible evidence in the image."
+                )
 
             user_messages = [
                 {"role": "system", "content": system_prompt},
@@ -211,6 +273,7 @@ def build_zeroshot_content(query_image, question, question_type):
 def evaluate_model_zeroshot(model, processor, test_df, image_root, rouge_scr, device, desc="Zero-Shot Test"):
     model.eval()
     predictions = []
+    start_time = time.time()
     
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc=desc):
         question = row["question"]
@@ -242,7 +305,10 @@ def evaluate_model_zeroshot(model, processor, test_df, image_root, rouge_scr, de
         prompt_len = inputs["input_ids"].shape[1]
         gen_text = processor.tokenizer.decode(output_ids[0][prompt_len:], skip_special_tokens=True).strip()
         predictions.append(gen_text)
-        
+    
+    inference_time = time.time() - start_time
+    throughput = len(test_df) / inference_time if inference_time > 0 else 0.0
+    
     closed_preds, closed_gts = [], []
     open_preds, open_gts = [], []
     
@@ -256,13 +322,32 @@ def evaluate_model_zeroshot(model, processor, test_df, image_root, rouge_scr, de
             open_gts.append(str(row.answer))
             
     closed_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(closed_preds, closed_gts)])) if closed_preds else 0.0
-    closed_f1 = float(np.mean([compute_f1(p, g) for p, g in zip(closed_preds, closed_gts)])) if closed_preds else 0.0
+    open_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     open_bleu = float(np.mean([compute_bleu(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     open_rouge = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     
+    hallucination_rate = 0.0  # Placeholder - requires semantic similarity model
+    
     return {
-        "closed": {"n_samples": len(closed_preds), "accuracy": round(closed_acc, 6), "F1": round(closed_f1, 6)},
-        "open": {"n_samples": len(open_preds), "BLEU": round(open_bleu, 6), "ROUGE-L": round(open_rouge, 6)}
+        "closed-ended": {
+            "n_samples": len(closed_preds),
+            "Accuracy": round(closed_acc, 6),
+        },
+        "open-ended": {
+            "n_samples": len(open_preds),
+            "Accuracy": round(open_acc, 6),
+            "Exact Match": round(open_acc, 6),  # Same as accuracy for open-ended
+            "BLEU": round(open_bleu, 6),
+            "ROUGE-L": round(open_rouge, 6),
+            "BERTScore": 0.0,  # Placeholder - compute post-hoc
+        },
+        "hallucination": {
+            "Hallucination Rate": round(hallucination_rate, 6),
+        },
+        "performance": {
+            "inference_time_s": round(inference_time, 3),
+            "throughput_samples_per_sec": round(throughput, 3),
+        },
     }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -272,12 +357,15 @@ def evaluate_model_zeroshot(model, processor, test_df, image_root, rouge_scr, de
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--global_adapter", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter", help="Path to server/global_adapter")
-    parser.add_argument("--roco_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\ROCO\roco_reasoning_10.csv")
-    parser.add_argument("--out_dir", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter_roco")
-    parser.add_argument("--epochs", type=int, default=3)
+    parser.add_argument("--roco_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\ROCO\roco_reasoning_train.csv")
+    parser.add_argument("--roco_image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\ROCO\train\images", help="Path to ROCO images")
+    parser.add_argument("--slake_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\Slake\slake_closed_reasoning.csv", help="Path to Slake reasoning CSV")
+    parser.add_argument("--slake_image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\Slake\images", help="Path to Slake images (extracted imgs.zip)")
+    parser.add_argument("--out_dir", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter_roco_slake")
+    parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--test_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\VQA-RAD\centralized\test.csv")
-    parser.add_argument("--image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\data\VQA_RAD\VQA_RAD Image Folder")
+    parser.add_argument("--image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\VQA-RAD\centralized")
     parser.add_argument("--grad_accum", type=int, default=8)
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--seed", type=int, default=42)
@@ -287,9 +375,10 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    log(f"Starting ROCO continuing training")
+    log(f"Starting unified reasoning training (ROCO + Slake)")
     log(f"Global adapter: {args.global_adapter}")
     log(f"ROCO CSV: {args.roco_csv}")
+    log(f"Slake CSV: {args.slake_csv}")
     log(f"Output directory: {out_dir}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -297,12 +386,26 @@ def main():
     log(f"Device: {device} | GPU: {gpu_static['gpu_name']} | VRAM: {gpu_static['total_vram_gb']} GB")
 
     # 1. Load Data
-    log("Loading ROCO dataset...")
-    hf_dataset = load_dataset("eltorio/ROCOv2-radiology", split="train", cache_dir=CACHE_DIR)
-    df_reasoning = pd.read_csv(args.roco_csv)
-    log(f"Loaded {len(df_reasoning)} reasoning samples.")
-
-    train_dataset = ROCODataset(hf_dataset, df_reasoning)
+    log("Loading reasoning datasets...")
+    
+    # Load ROCO
+    df_roco = None
+    if args.roco_csv and Path(args.roco_csv).exists():
+        df_roco = pd.read_csv(args.roco_csv)
+        log(f"Loaded ROCO: {len(df_roco)} samples")
+    
+    # Load Slake
+    df_slake = None
+    if args.slake_csv and Path(args.slake_csv).exists():
+        df_slake = pd.read_csv(args.slake_csv)
+        log(f"Loaded Slake: {len(df_slake)} samples")
+    
+    train_dataset = UnifiedReasoningDataset(
+        df_roco=df_roco,
+        df_slake=df_slake,
+        roco_image_root=args.roco_image_root,
+        slake_image_root=args.slake_image_root
+    )
     
     # 2. Load Processor and Base Model
     log(f"Loading base model {MODEL_NAME}...")
@@ -426,7 +529,10 @@ def main():
         json.dump(time_payload, f, indent=2)
         
     experiment_payload = {
-        "dataset": "ROCO",
+        "dataset": "ROCO+Slake",
+        "roco_samples": len(df_roco) if df_roco is not None else 0,
+        "slake_samples": len(df_slake) if df_slake is not None else 0,
+        "total_samples": len(train_dataset),
         "epochs": args.epochs,
         "batch_size": args.batch_size,
         "lr": args.lr,
