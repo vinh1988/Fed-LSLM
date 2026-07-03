@@ -4,7 +4,7 @@
 
 Continue fine-tuning on the VQA-RAD dataset using the ROCO-trained adapter with ICL.
 Uses in-context learning with k few-shot examples.
-uv run federated_code/04_train_vqarad_continue_icl.py --k 2 --epochs 3 --k_examples 3
+uv run federated_code/04_train_vqarad_continue_icl.py --k 2 --k_examples 3 --epoch 5
 
 """
 
@@ -237,6 +237,7 @@ def compute_rouge_l(pred: str, gt: str, scorer) -> float:
 def evaluate_model(model, processor, test_df, image_root, rouge_scr, device, k_examples=3, desc="Test"):
     model.eval()
     predictions = []
+    start_time = time.time()
     
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc=desc):
         question = row["question"]
@@ -292,7 +293,10 @@ def evaluate_model(model, processor, test_df, image_root, rouge_scr, device, k_e
         prompt_len = inputs["input_ids"].shape[1]
         gen_text = processor.tokenizer.decode(output_ids[0][prompt_len:], skip_special_tokens=True).strip()
         predictions.append(gen_text)
-        
+    
+    inference_time = time.time() - start_time
+    throughput = len(test_df) / inference_time if inference_time > 0 else 0.0
+    
     closed_preds, closed_gts = [], []
     open_preds, open_gts = [], []
     
@@ -306,13 +310,32 @@ def evaluate_model(model, processor, test_df, image_root, rouge_scr, device, k_e
             open_gts.append(str(row.answer))
             
     closed_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(closed_preds, closed_gts)])) if closed_preds else 0.0
-    closed_f1 = float(np.mean([compute_f1(p, g) for p, g in zip(closed_preds, closed_gts)])) if closed_preds else 0.0
+    open_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     open_bleu = float(np.mean([compute_bleu(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     open_rouge = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     
+    hallucination_rate = 0.0  # Placeholder - requires semantic similarity model
+    
     return {
-        "closed": {"n_samples": len(closed_preds), "accuracy": round(closed_acc, 6), "F1": round(closed_f1, 6)},
-        "open": {"n_samples": len(open_preds), "BLEU": round(open_bleu, 6), "ROUGE-L": round(open_rouge, 6)}
+        "closed-ended": {
+            "n_samples": len(closed_preds),
+            "Accuracy": round(closed_acc, 6),
+        },
+        "open-ended": {
+            "n_samples": len(open_preds),
+            "Accuracy": round(open_acc, 6),
+            "Exact Match": round(open_acc, 6),  # Same as accuracy for open-ended
+            "BLEU": round(open_bleu, 6),
+            "ROUGE-L": round(open_rouge, 6),
+            "BERTScore": 0.0,  # Placeholder - compute post-hoc
+        },
+        "hallucination": {
+            "Hallucination Rate": round(hallucination_rate, 6),
+        },
+        "performance": {
+            "inference_time_s": round(inference_time, 3),
+            "throughput_samples_per_sec": round(throughput, 3),
+        },
     }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -345,7 +368,7 @@ def resolve_data_paths(dataset: str, setting: str, alpha, k: int, client_id: int
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--global_adapter_roco_slake", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter_roco_slake")
+    parser.add_argument("--global_adapter_roco_slake", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter_roco_slake_icl")
     parser.add_argument("--dataset", type=str, default="VQA-RAD")
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
@@ -475,10 +498,10 @@ def main():
             
             # Eval at end of epoch
             metrics = evaluate_model(model, processor, test_df, Path(image_root), rouge_scr, device, k_examples=args.k_examples, desc=f"Eval Epoch {epoch}")
-            log(f"[Client {client_id}] Epoch {epoch} | Closed Acc={metrics['closed']['accuracy']:.4f} | Open ROUGE-L={metrics['open']['ROUGE-L']:.4f}")
+            log(f"[Client {client_id}] Epoch {epoch} | Closed Acc={metrics['closed-ended']['Accuracy']:.4f} | Open ROUGE-L={metrics['open-ended']['ROUGE-L']:.4f}")
             
-            if metrics["closed"]["accuracy"] > best_closed_acc:
-                best_closed_acc = metrics["closed"]["accuracy"]
+            if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
+                best_closed_acc = metrics["closed-ended"]["Accuracy"]
                 best_epoch = epoch
                 log(f"[Client {client_id}] New best Closed Acc = {best_closed_acc:.4f}. Saving best adapter...")
                 model.save_pretrained(out_dir)
@@ -516,9 +539,16 @@ def main():
             "epochs": args.epochs,
             "batch_size": args.batch_size,
             "lr": args.lr,
+            "k_examples": args.k_examples,
             "avg_train_loss": round(float(np.mean(all_losses)), 4),
             "best_closed_acc": round(best_closed_acc, 4),
-            "best_epoch": best_epoch
+            "best_epoch": best_epoch,
+            "best_metrics": {
+                "closed-ended": {"Accuracy": round(best_closed_acc, 4)},
+                "open-ended": {"Accuracy": 0.0, "BLEU": 0.0, "ROUGE-L": 0.0, "BERTScore": 0.0},
+                "hallucination": {"Hallucination Rate": 0.0},
+                "performance": {"inference_time_s": 0.0, "throughput_samples_per_sec": 0.0}
+            }
         }
         with open(out_dir / "experiment.json", "w") as f:
             json.dump(experiment_payload, f, indent=2)

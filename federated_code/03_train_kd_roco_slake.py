@@ -6,14 +6,15 @@ Continue training the FedAvg global LoRA adapter on unified reasoning dataset (R
 
 Pipeline:
 Base Qwen2.5-VL-3B
-    -> Load server/global_adapter
+    -> Load server/global_adapter_{mode} (icl or nonicl)
     -> Continue supervised LoRA training on ROCO (caption-based) + Slake (QA-based) reasoning
-    -> Save server/global_adapter_roco_slake
+    -> Save server/global_adapter_roco_slake_{mode}
 
 ROCO: Open-ended caption reasoning
 Slake: Closed-ended Yes/No question reasoning
 
-uv run federated_code/03_train_kd_roco_slake.py
+uv run federated_code/03_train_kd_roco_slake.py --mode icl
+uv run federated_code/03_train_kd_roco_slake.py --mode nonicl
 """
 
 import os
@@ -356,12 +357,14 @@ def evaluate_model_zeroshot(model, processor, test_df, image_root, rouge_scr, de
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--global_adapter", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter", help="Path to server/global_adapter")
+    parser.add_argument("--mode", type=str, choices=["icl", "nonicl"], required=True,
+                        help="Mode: icl or nonicl (selects global_adapter_icl or global_adapter_nonicl)")
+    parser.add_argument("--global_adapter", type=str, default=None, help="Path to server/global_adapter (auto-generated if not provided)")
     parser.add_argument("--roco_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\ROCO\roco_reasoning_train.csv")
     parser.add_argument("--roco_image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\ROCO\train\images", help="Path to ROCO images")
     parser.add_argument("--slake_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\Slake\slake_closed_reasoning.csv", help="Path to Slake reasoning CSV")
     parser.add_argument("--slake_image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\Slake\images", help="Path to Slake images (extracted imgs.zip)")
-    parser.add_argument("--out_dir", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter_roco_slake")
+    parser.add_argument("--out_dir", type=str, default=None, help="Output directory (auto-generated if not provided)")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--test_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\VQA-RAD\centralized\test.csv")
@@ -370,6 +373,13 @@ def main():
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
+
+    # Auto-generate paths if not provided
+    base_path = Path(r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server")
+    if args.global_adapter is None:
+        args.global_adapter = str(base_path / f"global_adapter_{args.mode}")
+    if args.out_dir is None:
+        args.out_dir = str(base_path / f"global_adapter_roco_slake_{args.mode}")
 
     set_seed(args.seed)
     out_dir = Path(args.out_dir)

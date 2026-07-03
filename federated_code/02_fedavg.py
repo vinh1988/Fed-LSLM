@@ -5,6 +5,8 @@
 
 # uv run federated_code/02_fedavg.py --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --mode icl
 # uv run federated_code/02_fedavg.py --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --mode nonicl
+# uv run federated_code/02_fedavg.py --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --mode icl_nokd
+
 
 from pathlib import Path
 import argparse
@@ -20,7 +22,7 @@ def main():
     parser.add_argument("--setting", type=str, default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
-    parser.add_argument("--mode", type=str, choices=["icl", "nonicl"], required=True,
+    parser.add_argument("--mode", type=str, choices=["icl", "nonicl", "icl_nokd"], required=True,
                         help="Mode: icl or nonicl")
     args = parser.parse_args()
 
