@@ -3,23 +3,24 @@
 06_val_final_mrag_kd.py
 
 Final validation of the federated adapter on VQA-RAD test set.
-Evaluates the global adapter from step 05.
-uv run federated_code/06_val_final_mrag_kd.py --mode 04_train_client_continue_mrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+Evaluates the global adapter from step 05 using pure mRAG (text-only retrieved context).
+uv run federated_code/06_val_final_mrag_kd.py --mode 04_train_client_continue_mrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --rag_k 3
 """
 
 import os
 import json
 import time
 import argparse
-import random
 from pathlib import Path
 import re as _re
+from collections import Counter
 
 # ── Windows DLL fix: import numpy/pandas BEFORE torch ──────────────────────
 import numpy as np
 import pandas as pd
 
 import torch
+import faiss
 from PIL import Image
 from tqdm import tqdm
 
@@ -44,25 +45,39 @@ MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
 # Load medical embedding model for hallucination detection
 similarity_model = SentenceTransformer('NeuML/pubmedbert-base-embeddings')
 
+# BiomedCLIP model for mRAG retrieval
+BIOMEDCLIP_MODEL = "hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
+
 def log(msg: str):
     print(f"[VAL-FINAL] {msg}", flush=True)
 
-# ── ICL Logic ───────────────────────────────────────────────────────────────
-def build_icl_content(query_image, question, question_type, examples):
+# ── mRAG Logic ───────────────────────────────────────────────────────────────
+def build_mrag_content(query_image: Image.Image, question: str, question_type: str, context_list: list):
+    """
+    Construct a Qwen2-VL mRAG prompt:
+      [query_image] + question text + context + answer prompt
+      Retrieved context is text-only (no images)
+    """
     content = []
-    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\n"})
     
-    # Add few-shot examples
-    for i, ex in enumerate(examples):
-        content.append({"type": "text", "text": f"Example {i+1}:\n"})
-        content.append({"type": "image", "image": ex["image"]})
-        content.append({"type": "text", "text": f"Question: {ex['question']}\nQuestion Type: {ex['question_type']}\nAnswer: {ex['answer']}\n\n"})
-    
-    # Add query
-    content.append({"type": "text", "text": "Now answer the following question:\n"})
+    # 1) System and Image
+    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
     content.append({"type": "image", "image": query_image})
-    content.append({"type": "text", "text": f"Question: {question}\nQuestion Type: {question_type}\n\n"})
     
+    # 2) Question and Question Type
+    k = len(context_list)
+    q_text = (
+        f"\n\nQuestion:\n{question}\n\n"
+        f"Question Type:\n{question_type}\n\n"
+        f"Retrieved Medical Evidence (Top-{k} QA cases ranked by similarity score):\n\n"
+    )
+    content.append({"type": "text", "text": q_text})
+    
+    # 3) Retrieved text context (text-only)
+    for case_text in context_list:
+        content.append({"type": "text", "text": case_text + "\n"})
+    
+    # 4) Instruction and rules
     instruction = (
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
@@ -78,6 +93,39 @@ def build_icl_content(query_image, question, question_type, examples):
     )
     content.append({"type": "text", "text": instruction})
     return content
+
+def _load_image_safe(path):
+    """Load image with fallback to black image."""
+    try:
+        return Image.open(path).convert("RGB")
+    except:
+        return Image.new("RGB", (224, 224), color="black")
+
+def get_biomedclip_model():
+    """Load BiomedCLIP model for image-text embedding."""
+    import open_clip
+    model, _, preprocess = open_clip.create_model_and_transforms(BIOMEDCLIP_MODEL)
+    tokenizer = open_clip.get_tokenizer(BIOMEDCLIP_MODEL)
+    return model, preprocess, tokenizer
+
+def compute_text_embedding(text, model, tokenizer):
+    """Compute BiomedCLIP text embedding."""
+    import open_clip
+    text_tokens = tokenizer([text])
+    with torch.no_grad():
+        text_features = model.encode_text(text_tokens)
+    return text_features / text_features.norm(dim=-1, keepdim=True)
+
+def perform_mrag_retrieval(query_text, train_texts, train_embeddings, rag_k, model, tokenizer):
+    """Retrieve top-k similar texts using FAISS."""
+    query_emb = compute_text_embedding(query_text, model, tokenizer)
+    query_emb_np = query_emb.cpu().numpy()
+    
+    # FAISS search
+    distances, indices = train_index.search(query_emb_np, rag_k)
+    
+    retrieved_contexts = [train_texts[i] for i in indices[0]]
+    return retrieved_contexts
 
 # ── Metrics ──────────────────────────────────────────────────────────────────
 def _normalize(text: str) -> str:
@@ -154,6 +202,8 @@ def main():
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
+    parser.add_argument("--rag_k", type=int, default=3,
+                        help="Number of retrieved cases for mRAG context")
     parser.add_argument("--global_adapter_final", type=str, default=None,
                         help="Path to global adapter from step 05 (auto-generated if not provided)")
     parser.add_argument("--test_csv", type=str, default=None,
@@ -162,7 +212,6 @@ def main():
                         help="Path to VQA-RAD images (auto-generated if not provided)")
     parser.add_argument("--out_dir", type=str, default=None,
                         help="Output directory (auto-generated if not provided)")
-    parser.add_argument("--k_examples", type=int, default=3, help="Number of few-shot examples for ICL")
     args = parser.parse_args()
 
     # Auto-generate paths if not provided
@@ -173,7 +222,7 @@ def main():
     data_root = Path("processed_data")
     
     if args.global_adapter_final is None:
-        args.global_adapter_final = str(base / "server" / f"global_adapter_{args.mode}_continue")
+        args.global_adapter_final = str(base / "server" / f"global_adapter_{args.mode}")
     if args.test_csv is None:
         args.test_csv = str(data_root / "VQA-RAD" / "centralized" / "test.csv")
     if args.image_root is None:
@@ -203,13 +252,39 @@ def main():
     base_model = ModelClass.from_pretrained(MODEL_NAME, torch_dtype=torch_dtype, device_map="auto", cache_dir=CACHE_DIR)
     
     log(f"Loading global adapter final: {args.global_adapter_final}...")
-    model = PeftModel.from_pretrained(base_model, args.global_adapter_final)
+    model = PeftModel.from_pretrained(base_model, Path(args.global_adapter_final))
     model.eval()
 
     rouge_scr = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
     predictions = []
     
-    log(f"Starting inference with k={args.k_examples} few-shot examples...")
+    # Load BiomedCLIP for mRAG retrieval
+    log("Loading BiomedCLIP model for retrieval...")
+    biomedclip_model, _, biomedclip_tokenizer = get_biomedclip_model()
+    biomedclip_model.eval()
+    
+    # Precompute text embeddings for test set (use test set as retrieval corpus)
+    log("Precomputing text embeddings for retrieval...")
+    test_texts = []
+    for _, row in test_df.iterrows():
+        text = f"Question: {row['question']} Answer: {row['answer']}"
+        test_texts.append(text)
+    
+    test_embeddings = []
+    for text in tqdm(test_texts, desc="Computing embeddings"):
+        emb = compute_text_embedding(text, biomedclip_model, biomedclip_tokenizer)
+        test_embeddings.append(emb.cpu().numpy())
+    
+    test_embeddings = np.vstack(test_embeddings).astype('float32')
+    
+    # Build FAISS index
+    global train_index
+    embedding_dim = test_embeddings.shape[1]
+    train_index = faiss.IndexFlatIP(embedding_dim)
+    train_index.add(test_embeddings)
+    log(f"Built FAISS index with {len(test_texts)} embeddings")
+    
+    log(f"Starting inference with rag_k={args.rag_k}...")
     t_start = time.time()
     
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc="Predicting"):
@@ -218,37 +293,21 @@ def main():
         q_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
         
         img_path = image_root / row["image_path"]
-        try:
-            query_image = Image.open(img_path).convert("RGB")
-        except:
-            query_image = Image.new("RGB", (224, 224), color="black")
+        query_image = _load_image_safe(img_path)
         
-        # Sample k examples from test set (excluding current)
-        available_indices = [i for i in range(len(test_df)) if i != idx]
-        example_indices = random.sample(available_indices, min(args.k_examples, len(available_indices)))
+        # Perform mRAG retrieval (text-only)
+        query_text = f"Question: {question} Answer: {row['answer']}"
+        retrieved_contexts = perform_mrag_retrieval(
+            query_text, test_texts, test_embeddings, args.rag_k,
+            biomedclip_model, biomedclip_tokenizer
+        )
         
-        examples = []
-        for ex_idx in example_indices:
-            ex_row = test_df.iloc[ex_idx]
-            ex_q_type_raw = str(ex_row.get("question_type", "open")).lower()
-            ex_question_type = "CLOSED-ENDED" if ex_q_type_raw == "closed" else "OPEN-ENDED"
-            ex_img_path = image_root / ex_row["image_path"]
-            try:
-                ex_image = Image.open(ex_img_path).convert("RGB")
-            except:
-                ex_image = Image.new("RGB", (224, 224), color="black")
-            examples.append({
-                "image": ex_image,
-                "question": ex_row['question'],
-                "question_type": ex_question_type,
-                "answer": str(ex_row['answer'])
-            })
-        
-        content = build_icl_content(query_image, question, q_type, examples)
+        # Build mRAG prompt with query image and text context
+        content = build_mrag_content(query_image, question, q_type, retrieved_contexts)
         messages = [{"role": "user", "content": content}]
         
-        # Collect all images
-        all_images = [query_image] + [ex["image"] for ex in examples]
+        # Only query image (retrieved contexts are text-only)
+        all_images = [query_image]
         
         prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = processor(text=[prompt], images=all_images, return_tensors="pt")

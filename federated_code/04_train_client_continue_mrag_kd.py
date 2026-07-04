@@ -22,6 +22,7 @@ import time
 import argparse
 import random
 import datetime
+import re as _re
 from pathlib import Path
 from collections import Counter
 
@@ -342,10 +343,22 @@ def evaluate_model(model, processor, test_df, test_contexts, image_root, rouge_s
             open_preds.append(pred)
             open_gts.append(str(row.answer))
             
-    closed_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(closed_preds, closed_gts)])) if closed_preds else 0.0
-    open_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
-    open_bleu = float(np.mean([compute_bleu(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
-    open_rouge = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
+    closed_acc = 0.0
+    open_acc = 0.0
+    open_bleu = 0.0
+    open_rouge = 0.0
+    
+    try:
+        if closed_preds:
+            closed_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(closed_preds, closed_gts)]))
+        if open_preds:
+            open_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)]))
+            open_bleu = float(np.mean([compute_bleu(p, g) for p, g in zip(open_preds, open_gts)]))
+            open_rouge = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)]))
+    except Exception as e:
+        log(f"Error computing metrics: {e}")
+        log(f"closed_preds: {len(closed_preds)}, closed_gts: {len(closed_gts)}")
+        log(f"open_preds: {len(open_preds)}, open_gts: {len(open_gts)}")
     
     hallucination_rate = 0.0  # Placeholder - requires semantic similarity model
     

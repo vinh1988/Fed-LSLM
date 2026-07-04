@@ -195,7 +195,7 @@ fi
 # ==============================================================================
 # STEP 05: Final Federated Averaging
 # ==============================================================================
-STEP05_OUTPUT="$SERVER_DIR/global_adapter_${MODE}_continue"
+STEP05_OUTPUT="$SERVER_DIR/global_adapter_${MODE}"
 STEP05_CMD="uv run $FEDERATED_CODE/05_fedavg_final_mrag_kd.py --mode $MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K"
 
 run_step "05" "Final Federated Averaging" "$STEP05_CMD" "$STEP05_OUTPUT"
@@ -204,7 +204,7 @@ run_step "05" "Final Federated Averaging" "$STEP05_CMD" "$STEP05_OUTPUT"
 # STEP 06: Final Validation
 # ==============================================================================
 STEP06_OUTPUT="$EXPERIMENTS_DIR/final_val_${MODE}"
-STEP06_CMD="uv run $FEDERATED_CODE/06_val_final_mrag_kd.py --mode $MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K"
+STEP06_CMD="uv run $FEDERATED_CODE/06_val_final_mrag_kd.py --mode $MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --rag_k 3"
 
 run_step "06" "Final Validation" "$STEP06_CMD" "$STEP06_OUTPUT"
 

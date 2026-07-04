@@ -67,7 +67,7 @@ def copy_adapter_config(src_client_path, dst_path):
         raise FileNotFoundError(f"Missing adapter_config.json in {src_client_path}")
 
     shutil.copy(src_config, dst_config)
-    print(f"[SAVE] adapter_config.json → {dst_config}")
+    print(f"[SAVE] adapter_config.json to {dst_config}")
 
 
 # =========================================================
@@ -97,7 +97,7 @@ def main():
     if args.clients_dir is None:
         args.clients_dir = str(base / "clients")
     if args.output_dir is None:
-        args.output_dir = str(base / "server" / f"global_adapter_{args.mode}_continue")
+        args.output_dir = str(base / "server" / f"global_adapter_{args.mode}")
 
     print("\n==============================")
     print(f" FEDAVG FINAL {args.mode.upper()} (LoRA / PEFT) ")
@@ -140,7 +140,7 @@ def main():
         if set(sd.keys()) != ref_keys:
             raise ValueError(f"Mismatch in client {client_names[i]}")
 
-    print("\nAll clients compatible ✔")
+    print("\nAll clients compatible OK")
 
     # -----------------------------------------------------
     # FedAvg aggregation
@@ -159,14 +159,14 @@ def main():
 
     save_file(global_state, str(save_path))
 
-    print(f"\nSaved global weights → {save_path}")
+    print(f"\nSaved global weights to {save_path}")
 
     # -----------------------------------------------------
     # Copy adapter config (CRITICAL)
     # -----------------------------------------------------
     copy_adapter_config(str(client_paths[0]), str(output_dir))
 
-    print("\nDONE ✔ Global adapter is PEFT-ready")
+    print("\nDONE. Global adapter is PEFT-ready")
 
 
 # =========================================================
