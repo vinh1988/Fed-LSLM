@@ -68,38 +68,38 @@ def set_seed(seed):
 def precompute_embeddings(csv_path, data_dir, model, preprocess, tokenizer, device):
     df = pd.read_csv(csv_path)
     embeddings = []
-    
+
     for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"Embedding {csv_path.name}"):
-        img_path = data_dir / row['image_path']
-        question = str(row['question'])
-        
-        # Load and preprocess image
+        img_path = data_dir / row["image_path"]
+        question = str(row["question"])
+
         try:
-            image = Image.open(img_path).convert('RGB')
+            image = Image.open(img_path).convert("RGB")
             image_input = preprocess(image).unsqueeze(0).to(device)
         except Exception as e:
-            log(f"Warning: failed to load image {img_path}: {e}. Using zero tensor.")
+            log(f"Warning: failed to load image {img_path}: {e}. Using zeros.")
             image_input = torch.zeros(1, 3, 224, 224).to(device)
-            
-        # Tokenize question
+
         text_input = tokenizer([question]).to(device)
-        
+
         with torch.no_grad():
-            image_features = model.encode_image(image_input)
-            text_features = model.encode_text(text_input)
-            
-            # L2-normalize
-            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-            
-            # Combine by concatenation
-            combined = torch.cat([image_features, text_features], dim=-1)
+            img_feat  = model.encode_image(image_input)
+            text_feat = model.encode_text(text_input)
+            img_feat  = img_feat  / img_feat.norm(dim=-1, keepdim=True)
+            text_feat = text_feat / text_feat.norm(dim=-1, keepdim=True)
+            combined  = torch.cat([img_feat, text_feat], dim=-1)
             embeddings.append(combined.cpu().numpy()[0])
-            
+
     return np.array(embeddings)
 
+
+def l2_normalize(x: np.ndarray) -> np.ndarray:
+    norms = np.linalg.norm(x, axis=1, keepdims=True)
+    return x / np.where(norms == 0, 1.0, norms)
+
+
 # Format retrieved documents (text portion)
-def format_retrieved_knowledge(df, indices, scores=None):
+def format_retrieved_knowledge(df: pd.DataFrame, indices, scores=None):
     docs = []
     if scores is None:
         scores = [0.0] * len(indices)
@@ -108,51 +108,39 @@ def format_retrieved_knowledge(df, indices, scores=None):
         docs.append(f"Top-{rank}:\nScore: {score:.4f}\nQuestion: {row['question']}\nAnswer: {row['answer']}\n")
     return docs
 
-# Get image paths for retrieved cases
-def get_retrieved_image_paths(df, indices):
-    return [df.iloc[idx]['image_path'] for idx in indices]
 
 # Custom PyTorch Dataset
 class MedVQADataset(Dataset):
-    def __init__(self, df, retrieved_contexts, retrieved_image_paths, data_dir, max_length=512):
-        self.df = df
+    def __init__(self, df: pd.DataFrame, retrieved_contexts, image_root: Path, max_length: int = 512):
+        self.df = df.reset_index(drop=True)
         self.retrieved_contexts = retrieved_contexts
-        self.retrieved_image_paths = retrieved_image_paths
-        self.data_dir = Path(data_dir)
+        self.image_root = image_root
         self.max_length = max_length
-        
+
     def __len__(self):
         return len(self.df)
-    
-    def _load_image(self, img_path):
+
+    def _load_image(self, rel_path: str) -> Image.Image:
+        full = self.image_root / rel_path
         try:
-            return Image.open(img_path).convert('RGB')
+            return Image.open(full).convert("RGB")
         except Exception as e:
-            log(f"Warning: failed to load image {img_path}: {e}")
-            return Image.new('RGB', (224, 224), color='black')
-        
+            log(f"Warning: failed to load image {full}: {e}")
+            return Image.new("RGB", (224, 224), color="black")
+
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        question = row['question']
-        context = self.retrieved_contexts[idx]
-        answer = row['answer']
-        
-        # Determine question type
-        q_type_raw = str(row.get('question_type', 'open')).lower()
+        q_type_raw   = str(row.get("question_type", "open")).lower()
         question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
         
-        # Load query image
-        query_image = self._load_image(self.data_dir / row['image_path'])
-            
         return {
-            "query_image": query_image,
-            "question": question,
+            "query_image":   self._load_image(row["image_path"]),
+            "question":      row["question"],
             "question_type": question_type,
-            "context": context,
-            "answer": answer
+            "context":       self.retrieved_contexts[idx],
+            "answer":        str(row["answer"])
         }
 
-# Build multi-image mRAG content for the user message
 def build_mrag_content(query_image, question, question_type, context_list):
     """
     Construct a Qwen2-VL mRAG prompt:
@@ -182,12 +170,12 @@ def build_mrag_content(query_image, question, question_type, context_list):
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
         "- If the question is CLOSED-ENDED (Yes/No only):\n"
-        "  • The final answer MUST be \"yes\" or \"no\"\n"
-        "  • Focus primarily on the image\n"
-        "  • Use retrieved QA cases only if they strongly match the visual evidence\n\n"
+        "  - The final answer MUST be \"yes\" or \"no\"\n"
+        "  - Focus primarily on the image\n"
+        "  - Use retrieved QA cases only if they strongly match the visual evidence\n\n"
         "- If the question is OPEN-ENDED:\n"
-        "  • Use both the image and retrieved QA cases\n"
-        "  • Combine visual evidence with similar QA examples to improve reasoning and completeness\n\n"
+        "  - Use both the image and retrieved QA cases\n"
+        "  - Combine visual evidence with similar QA examples to improve reasoning and completeness\n\n"
         "General rules:\n"
         "- Retrieved cases are ranked by similarity score (higher score = more relevant)\n"
         "- Ignore low-score or irrelevant retrieved cases\n"
@@ -200,53 +188,43 @@ def build_mrag_content(query_image, question, question_type, context_list):
     return content
 
 
-# Collate function for dynamic padding using processor
 def get_collate_fn(processor):
     def collate_fn(batch):
-        # Collect all images per sample: query + retrieved
         all_images_per_sample = []
-        user_prompts = []
-        full_prompts = []
+        user_prompts  = []
+        full_prompts  = []
         
         for item in batch:
-            sample_images = [item['query_image']]
+            sample_images = [item["query_image"]]
             all_images_per_sample.append(sample_images)
             
             mrag_content = build_mrag_content(
-                item['query_image'],
-                item['question'], item['question_type'], item['context']
+                item["query_image"], item["question"], item["question_type"], item["context"]
             )
-            
             user_messages = [{"role": "user", "content": mrag_content}]
             full_messages = user_messages + [
-                {
-                    "role": "assistant",
-                    "content": [{"type": "text", "text": str(item['answer'])}]
-                }
+                {"role": "assistant", "content": [{"type": "text", "text": item["answer"]}]}
             ]
             
             user_p = processor.apply_chat_template(user_messages, tokenize=False, add_generation_prompt=True)
             full_p = processor.apply_chat_template(full_messages, tokenize=False, add_generation_prompt=False)
-            
             user_prompts.append(user_p)
             full_prompts.append(full_p)
         
-        # Flatten all images for the processor (it expects a flat list)
-        flat_images = [img for sample_imgs in all_images_per_sample for img in sample_imgs]
+        flat_images = [img for imgs in all_images_per_sample for img in imgs]
+        inputs      = processor(text=full_prompts, images=flat_images, padding=True, return_tensors="pt")
         
-        inputs = processor(text=full_prompts, images=flat_images, padding=True, return_tensors="pt")
-        
-        input_ids = inputs['input_ids']
-        attention_mask = inputs['attention_mask']
-        labels = input_ids.clone()
+        input_ids      = inputs["input_ids"]
+        attention_mask = inputs["attention_mask"]
+        labels         = input_ids.clone()
         
         for i, user_p in enumerate(user_prompts):
-            inputs_user = processor(text=[user_p], images=all_images_per_sample[i], return_tensors="pt")
-            user_len = inputs_user['input_ids'].shape[1]
+            inp_user  = processor(text=[user_p], images=all_images_per_sample[i], return_tensors="pt")
+            user_len  = inp_user["input_ids"].shape[1]
             labels[i, :user_len] = -100
             labels[i, attention_mask[i] == 0] = -100
-            
-        inputs['labels'] = labels
+        
+        inputs["labels"] = labels
         return inputs
     return collate_fn
 
@@ -456,7 +434,7 @@ def main():
         test_features = np.load(test_cache)
     else:
         log("Loading BiomedCLIP model to compute embeddings...")
-        biomed_model, preprocess = open_clip.create_model_from_pretrained(args.biomed_model_name)
+        biomed_model, _, preprocess = open_clip.create_model_and_transforms(args.biomed_model_name, pretrained=None)
         biomed_tokenizer = open_clip.get_tokenizer(args.biomed_model_name)
         biomed_model.to(device)
         biomed_model.eval()
@@ -484,18 +462,19 @@ def main():
         norms = np.linalg.norm(x, axis=1, keepdims=True)
         return x / np.where(norms == 0, 1, norms)
         
-    train_features = l2_norm_rows(train_features)
-    test_features = l2_norm_rows(test_features)
+    train_features = l2_normalize(train_features)
+    test_features = l2_normalize(test_features)
     
-    index = faiss.IndexFlatIP(1024)  # 1024 dimensions
-    index.add(train_features)
+    # Build FAISS index
+    faiss_dim = train_features.shape[1]
+    index = faiss.IndexFlatIP(faiss_dim)
+    index.add(train_features.astype(np.float32))
     
     log(f"Performing RAG retrieval (k={args.k})...")
     # For training data, we query the index but exclude the query sample itself to prevent ground-truth leakage.
     train_contexts = []
-    train_retrieved_img_paths = []
     # Search for k+1 neighbors in training set
-    D_train, I_train = index.search(train_features, args.k + 1)
+    D_train, I_train = index.search(train_features.astype(np.float32), args.k + 1)
     for idx in range(len(train_df)):
         retrieved_indices = []
         retrieved_scores = []
@@ -515,17 +494,14 @@ def main():
                 if len(retrieved_indices) == args.k:
                     break
         train_contexts.append(format_retrieved_knowledge(train_df, retrieved_indices, retrieved_scores))
-        train_retrieved_img_paths.append(get_retrieved_image_paths(train_df, retrieved_indices))
         
     # For test data, we just retrieve top-k closest from training set
     test_contexts = []
-    test_retrieved_img_paths = []
-    D_test, I_test = index.search(test_features, args.k)
+    D_test, I_test = index.search(test_features.astype(np.float32), args.k)
     for idx in range(len(test_df)):
         test_contexts.append(format_retrieved_knowledge(train_df, I_test[idx], D_test[idx]))
-        test_retrieved_img_paths.append(get_retrieved_image_paths(train_df, I_test[idx]))
         
-    log("RAG retrieval contexts (text + image paths) prepared successfully.")
+    log("RAG retrieval contexts prepared successfully.")
     
     # Step 3: Load Qwen Generator VLM & Apply LoRA
     # ----------------------------------------------------
@@ -584,7 +560,7 @@ def main():
     # ----------------------------------------------------
     # Step 4: Setup Dataset & DataLoader
     # ----------------------------------------------------
-    train_dataset = MedVQADataset(train_df, train_contexts, train_retrieved_img_paths, data_dir, max_length=args.max_length)
+    train_dataset = MedVQADataset(train_df, train_contexts, data_dir, max_length=args.max_length)
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
