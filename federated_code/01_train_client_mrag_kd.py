@@ -278,12 +278,12 @@ def build_mrag_content(query_image: Image.Image, question: str, question_type: s
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
         "- If the question is CLOSED-ENDED (Yes/No only):\n"
-        "  • The final answer MUST be \"yes\" or \"no\"\n"
-        "  • Focus primarily on the image\n"
-        "  • Use retrieved QA cases only if they strongly match the visual evidence\n\n"
+        "  - The final answer MUST be \"yes\" or \"no\"\n"
+        "  - Focus primarily on the image\n"
+        "  - Use retrieved QA cases only if they strongly match the visual evidence\n\n"
         "- If the question is OPEN-ENDED:\n"
-        "  • Use both the image and retrieved QA cases\n"
-        "  • Combine visual evidence with similar QA examples to improve reasoning and completeness\n\n"
+        "  - Use both the image and retrieved QA cases\n"
+        "  - Combine visual evidence with similar QA examples to improve reasoning and completeness\n\n"
         "General rules:\n"
         "- Retrieved cases are ranked by similarity score (higher score = more relevant)\n"
         "- Ignore low-score or irrelevant retrieved cases\n"
@@ -764,7 +764,7 @@ def train_single_client(args, client_id: int):
             best_closed_acc = metrics["closed-ended"]["Accuracy"]
             best_epoch      = epoch
             best_metrics    = metrics
-            log(f"New best Closed Acc={best_closed_acc:.4f}  → saving adapter to {out_dir}")
+            log(f"New best Closed Acc={best_closed_acc:.4f}  saving adapter to {out_dir}")
             model.save_pretrained(out_dir)
 
             pred_df = test_df.copy()
@@ -927,7 +927,7 @@ def main():
     log(f"{'='*60}")
     log(f"ALL {args.k} CLIENTS COMPLETED in {total_min:.1f} min")
     for cid, out in results:
-        log(f"  client_{cid} → {out}")
+        log(f"  client_{cid} to {out}")
     log(f"{'='*60}")
 
 
