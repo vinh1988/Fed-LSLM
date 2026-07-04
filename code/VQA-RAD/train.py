@@ -18,6 +18,7 @@ import os
 import gc
 import argparse
 import random
+import time
 import torch
 from torch.utils.data import Dataset, DataLoader
 import faiss
@@ -31,7 +32,7 @@ from collections import Counter
 import open_clip
 from transformers import (
     AutoProcessor,
-    Qwen2VLForConditionalGeneration,
+    Qwen2_5_VLForConditionalGeneration,
     BitsAndBytesConfig,
     get_linear_schedule_with_warmup
 )
@@ -40,6 +41,17 @@ from peft import LoraConfig, get_peft_model, TaskType
 import nltk
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
+
+
+# ── Set HuggingFace cache ───────────────────────────────────────────────────
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+CACHE_DIR = os.path.join(PROJECT_ROOT, ".hf_cache")
+
+os.environ["HF_HOME"] = CACHE_DIR
+os.environ["HF_DATASETS_CACHE"] = os.path.join(CACHE_DIR, "datasets")
+os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(CACHE_DIR, "hub")
+
 
 # Set up logging/printing helper
 def log(msg):
@@ -275,9 +287,11 @@ def _load_image_safe(img_path):
         return Image.new('RGB', (224, 224), color='black')
 
 # Evaluation loop
-def evaluate_model(model, processor, test_df, test_contexts, test_retrieved_image_paths, data_dir, scorer, device, desc="Evaluating"):
+# Evaluation loop
+def evaluate_model(model, processor, test_df, test_contexts, data_dir, scorer, device, desc="Evaluating"):
     model.eval()
     predictions = []
+    start_time = time.time()
     
     log(f"Running generation on {desc} set...")
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc=desc):
@@ -314,24 +328,61 @@ def evaluate_model(model, processor, test_df, test_contexts, test_retrieved_imag
         gen_text = processor.tokenizer.decode(output_ids[0][prompt_len:], skip_special_tokens=True).strip()
         predictions.append(gen_text)
         
-    # Calculate metrics
-    ems = []
-    f1s = []
-    bleus = []
-    rouges = []
+    inference_time = time.time() - start_time
+    throughput = len(test_df) / inference_time if inference_time > 0 else 0.0
+    
+    # Calculate metrics per question type
+    closed_preds, closed_gts = [], []
+    open_preds, open_gts = [], []
     
     for pred, row in zip(predictions, test_df.itertuples()):
-        gt = row.answer
-        ems.append(compute_exact_match(pred, gt))
-        f1s.append(compute_f1(pred, gt))
-        bleus.append(compute_bleu(pred, gt))
-        rouges.append(compute_rouge_l(pred, gt, scorer))
+        qt = str(row.question_type).lower()
+        if qt == "closed":
+            closed_preds.append(pred)
+            closed_gts.append(str(row.answer))
+        else:
+            open_preds.append(pred)
+            open_gts.append(str(row.answer))
+            
+    closed_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(closed_preds, closed_gts)])) if closed_preds else 0.0
+    open_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
+    open_bleu = float(np.mean([compute_bleu(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
+    open_rouge = float(np.mean([compute_rouge_l(p, g, scorer) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
+    
+    if open_preds and open_gts:
+        from bert_score import score as bert_score_fn
+        _, _, bert_f1 = bert_score_fn(
+            open_preds,
+            open_gts,
+            lang="en",
+            verbose=False
+        )
+        open_bert = float(bert_f1.mean().item())
+    else:
+        open_bert = 0.0
         
+    hallucination_rate = 0.0  # Placeholder - requires semantic similarity model
+    
     metrics = {
-        "EM": np.mean(ems),
-        "F1": np.mean(f1s),
-        "BLEU": np.mean(bleus),
-        "ROUGE-L": np.mean(rouges)
+        "closed-ended": {
+            "n_samples": len(closed_preds),
+            "Accuracy": round(closed_acc, 6),
+        },
+        "open-ended": {
+            "n_samples": len(open_preds),
+            "Accuracy": round(open_acc, 6),
+            "Exact Match": round(open_acc, 6),
+            "BLEU": round(open_bleu, 6),
+            "ROUGE-L": round(open_rouge, 6),
+            "BERTScore": round(open_bert, 6),
+        },
+        "hallucination": {
+            "Hallucination Rate": round(hallucination_rate, 6),
+        },
+        "performance": {
+            "inference_time_s": round(inference_time, 3),
+            "throughput_samples_per_sec": round(throughput, 3),
+        },
     }
     
     return metrics, predictions
@@ -340,15 +391,15 @@ def main():
     parser = argparse.ArgumentParser(description="Train Generative RAG Med-VQA on VQA-RAD")
     parser.add_argument("--data_dir", type=str, default="processed_data/VQA-RAD/centralized",
                         help="Path to centralized VQA-RAD dataset folder")
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2-VL-2B-Instruct",
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
                         help="Generator VLM model path/name on HF")
     parser.add_argument("--biomed_model_name", type=str, default="hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224",
                         help="BiomedCLIP model checkpoint")
-    parser.add_argument("--output_dir", type=str, default="code/VQA-RAD/results",
+    parser.add_argument("--output_dir", type=str, default="experiments/VQA-RAD/centralized/Qwen2.5-VL-3B-Instruct/mrag",
                         help="Directory to save the checkpoints and predictions")
     parser.add_argument("--k", type=int, default=3,
                         help="Number of retrieved cases to include as knowledge context")
-    parser.add_argument("--epochs", type=int, default=10,
+    parser.add_argument("--epochs", type=int, default=5,
                         help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=1,
                         help="Batch size for training")
@@ -473,7 +524,8 @@ def main():
     processor = AutoProcessor.from_pretrained(
         args.model_name,
         min_pixels=128*28*28,
-        max_pixels=256*28*28
+        max_pixels=256*28*28,
+        cache_dir=CACHE_DIR
     )
     processor.tokenizer.padding_side = "right"
     if processor.tokenizer.pad_token is None:
@@ -487,11 +539,12 @@ def main():
         bnb_4bit_use_double_quant=True
     )
         
-    base_model = Qwen2VLForConditionalGeneration.from_pretrained(
+    base_model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         args.model_name,
         quantization_config=bnb_config,
         torch_dtype=torch_dtype,
-        device_map="auto"
+        device_map="auto",
+        cache_dir=CACHE_DIR
     )
     
     # Enable gradient checkpointing to trade compute for memory
@@ -537,7 +590,7 @@ def main():
     )
     
     log("Starting training...")
-    best_em = -1.0
+    best_closed_acc = -1.0
     
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -569,25 +622,20 @@ def main():
         log(f"Epoch {epoch} finished. Average Loss: {avg_loss:.4f}")
         
         # Evaluate model after each epoch
-        metrics, predictions = evaluate_model(model, processor, test_df, test_contexts, test_retrieved_img_paths, data_dir, scorer, device, desc="Test")
-        log(f"Epoch {epoch} Eval Metrics: EM={metrics['EM']:.4f}, F1={metrics['F1']:.4f}, BLEU={metrics['BLEU']:.4f}, ROUGE-L={metrics['ROUGE-L']:.4f}")
+        metrics, predictions = evaluate_model(model, processor, test_df, test_contexts, data_dir, scorer, device, desc="Test")
+        log(f"Epoch {epoch} Eval Metrics: Closed Acc={metrics['closed-ended']['Accuracy']:.4f}, Open ROUGE-L={metrics['open-ended']['ROUGE-L']:.4f}, Open BERTScore={metrics['open-ended']['BERTScore']:.4f}")
         
         # Save best model
-        if metrics['EM'] > best_em:
-            best_em = metrics['EM']
-            log(f"New best Exact Match: {best_em:.4f}. Saving adapter weights...")
-            model.save_pretrained(output_dir / "best_lora_adapter")
+        if metrics['closed-ended']['Accuracy'] > best_closed_acc:
+            best_closed_acc = metrics['closed-ended']['Accuracy']
+            log(f"New best Closed Accuracy: {best_closed_acc:.4f}. Saving adapter weights...")
+            model.save_pretrained(output_dir)
             
             # Save predictions
             results_df = test_df.copy()
-            results_df['retrieved_knowledge'] = ["\n".join(ctx) for ctx in test_contexts]
             results_df['prediction'] = predictions
-            results_df['EM'] = [compute_exact_match(p, r.answer) for p, r in zip(predictions, test_df.itertuples())]
-            results_df['F1'] = [compute_f1(p, r.answer) for p, r in zip(predictions, test_df.itertuples())]
-            results_df['BLEU'] = [compute_bleu(p, r.answer) for p, r in zip(predictions, test_df.itertuples())]
-            results_df['ROUGE-L'] = [compute_rouge_l(p, r.answer, scorer) for p, r in zip(predictions, test_df.itertuples())]
             results_df.to_csv(output_dir / "best_predictions.csv", index=False)
-            log(f"Saved predictions and scores to {output_dir / 'best_predictions.csv'}")
+            log(f"Saved predictions to {output_dir / 'best_predictions.csv'}")
 
     log("Training completed successfully!")
 
