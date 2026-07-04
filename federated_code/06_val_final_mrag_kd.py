@@ -82,10 +82,10 @@ def build_mrag_content(query_image: Image.Image, question: str, question_type: s
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
         "- If the question is CLOSED-ENDED (Yes/No only):\n"
-        "  • The final answer MUST be \"yes\" or \"no\"\n"
-        "  • Focus primarily on the image\n\n"
+        "  - The final answer MUST be \"yes\" or \"no\"\n"
+        "  - Focus primarily on the image\n\n"
         "- If the question is OPEN-ENDED:\n"
-        "  • Use the image to answer the question\n\n"
+        "  - Use the image to answer the question\n\n"
         "General rules:\n"
         "- Do not output reasoning steps\n"
         "- Output only the final answer\n\n"
@@ -252,7 +252,7 @@ def main():
     base_model = ModelClass.from_pretrained(MODEL_NAME, torch_dtype=torch_dtype, device_map="auto", cache_dir=CACHE_DIR)
     
     log(f"Loading global adapter final: {args.global_adapter_final}...")
-    model = PeftModel.from_pretrained(base_model, Path(args.global_adapter_final))
+    model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter_final)))
     model.eval()
 
     rouge_scr = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
