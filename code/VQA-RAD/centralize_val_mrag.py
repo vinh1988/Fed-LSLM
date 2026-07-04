@@ -77,12 +77,12 @@ def build_mrag_content(query_image, question, question_type, context_list):
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
         "- If the question is CLOSED-ENDED (Yes/No only):\n"
-        "  • The final answer MUST be \"yes\" or \"no\"\n"
-        "  • Focus primarily on the image\n"
-        "  • Use retrieved QA cases only if they strongly match the visual evidence\n\n"
+        "  - The final answer MUST be \"yes\" or \"no\"\n"
+        "  - Focus primarily on the image\n"
+        "  - Use retrieved QA cases only if they strongly match the visual evidence\n\n"
         "- If the question is OPEN-ENDED:\n"
-        "  • Use both the image and retrieved QA cases\n"
-        "  • Combine visual evidence with similar QA examples to improve reasoning and completeness\n\n"
+        "  - Use both the image and retrieved QA cases\n"
+        "  - Combine visual evidence with similar QA examples to improve reasoning and completeness\n\n"
         "General rules:\n"
         "- Retrieved cases are ranked by similarity score (higher score = more relevant)\n"
         "- Ignore low-score or irrelevant retrieved cases\n"
@@ -103,30 +103,29 @@ def precompute_embeddings(csv_path, data_dir, model, preprocess, tokenizer, devi
         img_path = Path(data_dir) / row['image_path']
         question = str(row['question'])
         
-        # Load and preprocess image
         try:
             image = Image.open(img_path).convert('RGB')
             image_input = preprocess(image).unsqueeze(0).to(device)
         except Exception as e:
-            log(f"Warning: failed to load image {img_path}: {e}. Using zero tensor.")
+            log(f"Warning: failed to load image {img_path}: {e}. Using zeros.")
             image_input = torch.zeros(1, 3, 224, 224).to(device)
             
-        # Tokenize question
         text_input = tokenizer([question]).to(device)
         
         with torch.no_grad():
-            image_features = model.encode_image(image_input)
-            text_features = model.encode_text(text_input)
-            
-            # L2-normalize
-            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-            
-            # Combine by concatenation
-            combined = torch.cat([image_features, text_features], dim=-1)
+            img_feat  = model.encode_image(image_input)
+            text_feat = model.encode_text(text_input)
+            img_feat  = img_feat  / img_feat.norm(dim=-1, keepdim=True)
+            text_feat = text_feat / text_feat.norm(dim=-1, keepdim=True)
+            combined  = torch.cat([img_feat, text_feat], dim=-1)
             embeddings.append(combined.cpu().numpy()[0])
             
     return np.array(embeddings)
+
+
+def l2_normalize(x: np.ndarray) -> np.ndarray:
+    norms = np.linalg.norm(x, axis=1, keepdims=True)
+    return x / np.where(norms == 0, 1.0, norms)
 
 # ── Format Retrieved Documents ─────────────────────────────────────────────
 def format_retrieved_knowledge(df, indices, scores=None):
@@ -257,7 +256,7 @@ def main():
         test_features = np.load(test_cache)
     else:
         log("Loading BiomedCLIP model to compute embeddings...")
-        biomed_model, preprocess = open_clip.create_model_from_pretrained(args.biomed_model_name)
+        biomed_model, _, preprocess = open_clip.create_model_and_transforms(args.biomed_model_name, pretrained=None)
         biomed_tokenizer = open_clip.get_tokenizer(args.biomed_model_name)
         biomed_model.to(device)
         biomed_model.eval()
@@ -278,18 +277,15 @@ def main():
 
     # ── Step 2: Build FAISS Index and Perform Retrieval ───────────────────────
     log("Building FAISS index on train features...")
-    def l2_norm_rows(x):
-        norms = np.linalg.norm(x, axis=1, keepdims=True)
-        return x / np.where(norms == 0, 1, norms)
-        
-    train_features = l2_norm_rows(train_features)
-    test_features = l2_norm_rows(test_features)
+    train_features = l2_normalize(train_features)
+    test_features = l2_normalize(test_features)
     
-    index = faiss.IndexFlatIP(1024)
-    index.add(train_features)
+    faiss_dim = train_features.shape[1]
+    index = faiss.IndexFlatIP(faiss_dim)
+    index.add(train_features.astype(np.float32))
     
     log(f"Performing RAG retrieval (k={args.k_examples})...")
-    D_test, I_test = index.search(test_features, args.k_examples)
+    D_test, I_test = index.search(test_features.astype(np.float32), args.k_examples)
     
     train_df = pd.read_csv(args.train_csv)
     test_contexts = []
