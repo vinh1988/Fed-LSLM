@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""
+06_val_final_mrag_kd.py
+
+Final validation of the federated adapter on VQA-RAD test set.
+Evaluates the global adapter from step 05.
+uv run federated_code/06_val_final_mrag_kd.py --mode 04_train_client_continue_mrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+"""
+
 import os
 import json
 import time
@@ -7,8 +15,10 @@ import random
 from pathlib import Path
 import re as _re
 
+# ── Windows DLL fix: import numpy/pandas BEFORE torch ──────────────────────
 import numpy as np
 import pandas as pd
+
 import torch
 from PIL import Image
 from tqdm import tqdm
@@ -21,13 +31,15 @@ from rouge_score import rouge_scorer
 import bert_score
 from sentence_transformers import SentenceTransformer, util
 
-# ── Cache & Globals ──────────────────────────────────────────────────────────
-CACHE_DIR = r"D:\nckh_teacher_student\code\teacher_student\.hf_cache"
-os.environ["HF_HOME"] = CACHE_DIR
-os.environ["HF_DATASETS_CACHE"] = os.path.join(CACHE_DIR, "datasets")
-os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(CACHE_DIR, "hub")
+# ── Set HuggingFace cache (dynamic relative to project root) ───────────────
+project_root = Path(__file__).parent.parent
+CACHE_DIR = project_root / ".hf_cache"
+os.environ["HF_HOME"] = str(CACHE_DIR)
+os.environ["HF_DATASETS_CACHE"] = str(CACHE_DIR / "datasets")
+os.environ["HUGGINGFACE_HUB_CACHE"] = str(CACHE_DIR / "hub")
 
 MODEL_NAME = "Qwen/Qwen2.5-VL-3B-Instruct"
+MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
 
 # Load medical embedding model for hallucination detection
 similarity_model = SentenceTransformer('NeuML/pubmedbert-base-embeddings')
@@ -136,12 +148,38 @@ def evaluate_fast_hallucination(qa_type: str, gt: str, prediction: str, threshol
 # ── Main ─────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--global_adapter_final", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter_final_icl")
-    parser.add_argument("--test_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\VQA-RAD\centralized\test.csv")
-    parser.add_argument("--image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\VQA-RAD\centralized")
-    parser.add_argument("--out_dir", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\final_val_icl")
+    parser.add_argument("--mode", type=str, required=True,
+                        help="Script name suffix from step 05 (e.g., 04_train_client_continue_mrag_kd)")
+    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
+    parser.add_argument("--alpha", type=float, default=0.1)
+    parser.add_argument("--k", type=int, default=2)
+    parser.add_argument("--global_adapter_final", type=str, default=None,
+                        help="Path to global adapter from step 05 (auto-generated if not provided)")
+    parser.add_argument("--test_csv", type=str, default=None,
+                        help="Path to VQA-RAD test CSV (auto-generated if not provided)")
+    parser.add_argument("--image_root", type=str, default=None,
+                        help="Path to VQA-RAD images (auto-generated if not provided)")
+    parser.add_argument("--out_dir", type=str, default=None,
+                        help="Output directory (auto-generated if not provided)")
     parser.add_argument("--k_examples", type=int, default=3, help="Number of few-shot examples for ICL")
     args = parser.parse_args()
+
+    # Auto-generate paths if not provided
+    base = Path("experiments") / args.dataset / args.setting
+    if args.setting == "noniid":
+        base = base / f"alpha_{args.alpha}"
+    base = base / f"k{args.k}" / MODEL_SHORT
+    data_root = Path("processed_data")
+    
+    if args.global_adapter_final is None:
+        args.global_adapter_final = str(base / "server" / f"global_adapter_{args.mode}_continue")
+    if args.test_csv is None:
+        args.test_csv = str(data_root / "VQA-RAD" / "centralized" / "test.csv")
+    if args.image_root is None:
+        args.image_root = str(data_root / "VQA-RAD" / "centralized")
+    if args.out_dir is None:
+        args.out_dir = str(base / f"final_val_{args.mode}")
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

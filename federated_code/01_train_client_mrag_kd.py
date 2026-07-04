@@ -26,11 +26,9 @@ Windows note: numpy & pandas MUST be imported before torch to avoid DLL conflict
 
 # client_i/adapter
 
-# # IID, k=3 → tự chạy client_1, client_2, client_3
-# .\.venv\Scripts\python.exe federated_code/train_local_client_vqa_rad.py --dataset VQA-RAD --setting iid --k 3
-
 # # Non-IID α=0.1, k=2 → tự chạy client_1, client_2
-# .\.venv\Scripts\python.exe federated_code/train_local_client_vqa_rad.py --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+# uv run federated_code/01_train_client_mrag_kd.py --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+# uv run federated_code/01_train_client_nonicl.py --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
 
 
 # ── Windows DLL fix: import numpy/pandas BEFORE torch ──────────────────────
@@ -48,8 +46,12 @@ import datetime
 from pathlib import Path
 from collections import Counter
 
-# ── Set HuggingFace cache ───────────────────────────────────────────────────
-os.environ["HUGGINGFACE_HUB_CACHE"] = r"D:\nckh_teacher_student\code\teacher_student\.hf_cache\hub"
+# ── Set HuggingFace cache (dynamic relative to project root) ───────────────
+project_root = Path(__file__).parent.parent
+CACHE_DIR = project_root / ".hf_cache"
+os.environ["HF_HOME"] = str(CACHE_DIR)
+os.environ["HF_DATASETS_CACHE"] = str(CACHE_DIR / "datasets")
+os.environ["HUGGINGFACE_HUB_CACHE"] = str(CACHE_DIR / "hub")
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -94,14 +96,15 @@ def set_seed(seed: int):
 def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int) -> Path:
     """
     Construct the experiment output directory following the Experiment Space spec:
-        experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/{model}/clients/client_{id}/
+        experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/{model}/clients/client_{id}_scriptname/
     """
+    script_name = Path(__file__).stem
     base = Path("experiments") / dataset / setting
     if setting == "noniid":
         if alpha is None:
             raise ValueError("--alpha must be set for noniid setting")
         base = base / f"alpha_{alpha}"
-    base = base / f"k{k}" / MODEL_SHORT / "clients" / f"client_{client_id}_nonicl"
+    base = base / f"k{k}" / MODEL_SHORT / "clients" / f"client_{client_id}_{script_name}"
     return base
 
 
@@ -215,11 +218,9 @@ def get_retrieved_image_paths(df: pd.DataFrame, indices):
 # ──────────────────────────────────────────────────────────────────────────────
 
 class MedVQADataset(Dataset):
-    def __init__(self, df: pd.DataFrame, retrieved_contexts, retrieved_image_paths,
-                 image_root: Path, max_length: int = 512):
+    def __init__(self, df: pd.DataFrame, retrieved_contexts, image_root: Path, max_length: int = 512):
         self.df = df.reset_index(drop=True)
-        self.retrieved_contexts    = retrieved_contexts
-        self.retrieved_image_paths = retrieved_image_paths
+        self.retrieved_contexts = retrieved_contexts
         self.image_root = image_root
         self.max_length = max_length
 
@@ -238,20 +239,28 @@ class MedVQADataset(Dataset):
         row = self.df.iloc[idx]
         q_type_raw   = str(row.get("question_type", "open")).lower()
         question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
+        
         return {
             "query_image":   self._load_image(row["image_path"]),
             "question":      row["question"],
             "question_type": question_type,
             "context":       self.retrieved_contexts[idx],
-            "answer":        str(row["answer"]),
+            "answer":        str(row["answer"])
         }
 
 
 def build_mrag_content(query_image: Image.Image, question: str, question_type: str, context_list: list):
+    """
+    Construct a Qwen2-VL mRAG prompt:
+      [query_image] + question text + context + answer prompt
+    """
     content = []
-    content.append({"type": "text",  "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
+    
+    # 1) System and Image
+    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
     content.append({"type": "image", "image": query_image})
-
+    
+    # 2) Question and Question Type
     k = len(context_list)
     q_text = (
         f"\n\nQuestion:\n{question}\n\n"
@@ -259,10 +268,12 @@ def build_mrag_content(query_image: Image.Image, question: str, question_type: s
         f"Retrieved Medical Evidence (Top-{k} QA cases ranked by similarity score):\n\n"
     )
     content.append({"type": "text", "text": q_text})
-
+    
+    # 3) Retrieved text context
     for case_text in context_list:
         content.append({"type": "text", "text": case_text + "\n"})
-
+    
+    # 4) Instruction and rules
     instruction = (
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
@@ -281,6 +292,7 @@ def build_mrag_content(query_image: Image.Image, question: str, question_type: s
         "Answer:\n"
     )
     content.append({"type": "text", "text": instruction})
+    
     return content
 
 
@@ -289,37 +301,37 @@ def get_collate_fn(processor):
         all_images_per_sample = []
         user_prompts  = []
         full_prompts  = []
-
+        
         for item in batch:
             sample_images = [item["query_image"]]
             all_images_per_sample.append(sample_images)
-
+            
             mrag_content = build_mrag_content(
                 item["query_image"], item["question"], item["question_type"], item["context"]
             )
-            user_messages = [{"role": "user",      "content": mrag_content}]
+            user_messages = [{"role": "user", "content": mrag_content}]
             full_messages = user_messages + [
                 {"role": "assistant", "content": [{"type": "text", "text": item["answer"]}]}
             ]
-
+            
             user_p = processor.apply_chat_template(user_messages, tokenize=False, add_generation_prompt=True)
             full_p = processor.apply_chat_template(full_messages, tokenize=False, add_generation_prompt=False)
             user_prompts.append(user_p)
             full_prompts.append(full_p)
-
+        
         flat_images = [img for imgs in all_images_per_sample for img in imgs]
         inputs      = processor(text=full_prompts, images=flat_images, padding=True, return_tensors="pt")
-
+        
         input_ids      = inputs["input_ids"]
         attention_mask = inputs["attention_mask"]
         labels         = input_ids.clone()
-
+        
         for i, user_p in enumerate(user_prompts):
             inp_user  = processor(text=[user_p], images=all_images_per_sample[i], return_tensors="pt")
             user_len  = inp_user["input_ids"].shape[1]
             labels[i, :user_len] = -100
             labels[i, attention_mask[i] == 0] = -100
-
+        
         inputs["labels"] = labels
         return inputs
     return collate_fn
@@ -408,15 +420,18 @@ def evaluate_model(model, processor, test_df: pd.DataFrame, test_contexts: list,
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc=desc):
         question  = row["question"]
         context   = test_contexts[idx]
-        q_type    = str(row.get("question_type", "open")).lower()
-        q_type    = "CLOSED-ENDED" if q_type == "closed" else "OPEN-ENDED"
+        q_type_raw = str(row.get("question_type", "open")).lower()
+        q_type    = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
 
         query_image  = _load_image_safe(image_root / row["image_path"])
+        
         mrag_content = build_mrag_content(query_image, question, q_type, context)
         messages     = [{"role": "user", "content": mrag_content}]
+        
+        all_images = [query_image]
 
         prompt  = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs  = processor(text=[prompt], images=[query_image], return_tensors="pt")
+        inputs  = processor(text=[prompt], images=all_images, return_tensors="pt")
         inputs  = {k: v.to(device) for k, v in inputs.items()}
 
         with torch.no_grad():
@@ -588,7 +603,6 @@ def train_single_client(args, client_id: int):
     # Train retrieval (exclude self)
     D_tr, I_tr = index.search(train_features.astype(np.float32), args.rag_k + 1)
     train_contexts  = []
-    train_img_paths = []
     for i in range(len(train_df)):
         ret_idx, ret_sc = [], []
         for pos, mi in enumerate(I_tr[i]):
@@ -606,15 +620,12 @@ def train_single_client(args, client_id: int):
                 if len(ret_idx) == args.rag_k:
                     break
         train_contexts.append(format_retrieved_knowledge(train_df, ret_idx, ret_sc))
-        train_img_paths.append(get_retrieved_image_paths(train_df, ret_idx))
 
     # Test retrieval
     D_te, I_te = index.search(test_features.astype(np.float32), args.rag_k)
     test_contexts  = []
-    test_img_paths = []
     for i in range(len(test_df)):
         test_contexts.append(format_retrieved_knowledge(train_df, I_te[i], D_te[i]))
-        test_img_paths.append(get_retrieved_image_paths(train_df, I_te[i]))
 
     log("RAG retrieval done.")
 
@@ -630,6 +641,7 @@ def train_single_client(args, client_id: int):
         MODEL_NAME,
         min_pixels=128 * 28 * 28,
         max_pixels=256 * 28 * 28,
+        cache_dir=CACHE_DIR,
     )
     processor.tokenizer.padding_side = "right"
     if processor.tokenizer.pad_token is None:
@@ -644,6 +656,7 @@ def train_single_client(args, client_id: int):
         MODEL_NAME,
         torch_dtype=torch_dtype,
         device_map="auto",
+        cache_dir=CACHE_DIR,
     )
 
     for param in base_model.parameters():
@@ -667,7 +680,7 @@ def train_single_client(args, client_id: int):
 
     # ── Step 4: Dataset & DataLoader ─────────────────────────────────────────
     train_dataset = MedVQADataset(
-        train_df, train_contexts, train_img_paths,
+        train_df, train_contexts,
         image_root=image_root, max_length=args.max_length,
     )
     train_loader = DataLoader(

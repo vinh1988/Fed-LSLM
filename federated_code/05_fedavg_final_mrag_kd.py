@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 # =========================================================
-# 05_fedavg_final_icl.py
-# FedAvg for LoRA adapters (safetensors format) - ICL version
-# ONLY client_*_final_icl folders
-# Output: global_adapter_final_icl
+# 05_fedavg_final_mrag_kd.py
+# FedAvg for LoRA adapters (safetensors format) - mRAG KD version
+# Aggregates client adapters from step 04 (continue training)
+# Output: global_adapter_{mode}_continue
+# uv run federated_code/05_fedavg_final_mrag_kd.py --mode 04_train_client_continue_mrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
 # =========================================================
 
 import os
 import shutil
+import argparse
 import torch
 from collections import OrderedDict
+from pathlib import Path
 from safetensors.torch import load_file, save_file
 
 # =========================================================
 # CONFIG
 # =========================================================
 
-CLIENTS_DIR = r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\clients"
-
-OUTPUT_DIR = r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server\global_adapter_final_icl"
-
+MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
 DEVICE = "cpu"
 
 
@@ -75,25 +75,49 @@ def copy_adapter_config(src_client_path, dst_path):
 # =========================================================
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", type=str, required=True,
+                        help="Script name suffix from step 04 (e.g., 04_train_client_continue_mrag_kd)")
+    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
+    parser.add_argument("--alpha", type=float, default=0.1)
+    parser.add_argument("--k", type=int, default=2)
+    parser.add_argument("--clients_dir", type=str, default=None,
+                        help="Path to clients directory (auto-generated if not provided)")
+    parser.add_argument("--output_dir", type=str, default=None,
+                        help="Path to output directory (auto-generated if not provided)")
+    args = parser.parse_args()
+
+    # Auto-generate paths if not provided
+    base = Path("experiments") / args.dataset / args.setting
+    if args.setting == "noniid":
+        base = base / f"alpha_{args.alpha}"
+    base = base / f"k{args.k}" / MODEL_SHORT
+    
+    if args.clients_dir is None:
+        args.clients_dir = str(base / "clients")
+    if args.output_dir is None:
+        args.output_dir = str(base / "server" / f"global_adapter_{args.mode}_continue")
 
     print("\n==============================")
-    print(" FEDAVG FINAL ICL (LoRA / PEFT) ")
+    print(f" FEDAVG FINAL {args.mode.upper()} (LoRA / PEFT) ")
     print("==============================\n")
 
     # -----------------------------------------------------
-    # Only client_*_final_icl
+    # Find client directories matching the mode suffix
     # -----------------------------------------------------
+    clients_dir = Path(args.clients_dir)
     client_names = [
-        d for d in os.listdir(CLIENTS_DIR)
+        d for d in os.listdir(clients_dir)
         if d.startswith("client_")
-        and d.endswith("_final_icl")
-        and os.path.isdir(os.path.join(CLIENTS_DIR, d))
+        and d.endswith(f"_{args.mode}")
+        and os.path.isdir(clients_dir / d)
     ]
 
     if len(client_names) == 0:
-        raise ValueError("No client_*_final_icl folders found!")
+        raise ValueError(f"No client_*_{args.mode} folders found in {clients_dir}!")
 
-    client_paths = [os.path.join(CLIENTS_DIR, c) for c in client_names]
+    client_paths = [clients_dir / c for c in client_names]
 
     print(f"Found {len(client_paths)} clients:")
     for c in client_names:
@@ -128,18 +152,19 @@ def main():
     # -----------------------------------------------------
     # Save output directory
     # -----------------------------------------------------
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    save_path = os.path.join(OUTPUT_DIR, "adapter_model.safetensors")
+    save_path = output_dir / "adapter_model.safetensors"
 
-    save_file(global_state, save_path)
+    save_file(global_state, str(save_path))
 
     print(f"\nSaved global weights → {save_path}")
 
     # -----------------------------------------------------
     # Copy adapter config (CRITICAL)
     # -----------------------------------------------------
-    copy_adapter_config(client_paths[0], OUTPUT_DIR)
+    copy_adapter_config(str(client_paths[0]), str(output_dir))
 
     print("\nDONE ✔ Global adapter is PEFT-ready")
 

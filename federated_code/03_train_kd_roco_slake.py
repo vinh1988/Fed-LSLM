@@ -6,15 +6,14 @@ Continue training the FedAvg global LoRA adapter on unified reasoning dataset (R
 
 Pipeline:
 Base Qwen2.5-VL-3B
-    -> Load server/global_adapter_{mode} (icl or nonicl)
+    -> Load server/global_adapter_{mode} (from federated training)
     -> Continue supervised LoRA training on ROCO (caption-based) + Slake (QA-based) reasoning
     -> Save server/global_adapter_roco_slake_{mode}
 
 ROCO: Open-ended caption reasoning
 Slake: Closed-ended Yes/No question reasoning
 
-uv run federated_code/03_train_kd_roco_slake.py --mode icl
-uv run federated_code/03_train_kd_roco_slake.py --mode nonicl
+uv run federated_code/03_train_kd_roco_slake.py --mode 01_train_client_mrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
 """
 
 import os
@@ -28,11 +27,10 @@ from pathlib import Path
 from collections import Counter
 import re as _re
 
-from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-from rouge_score import rouge_scorer
-
+# ── Windows DLL fix: import numpy/pandas BEFORE torch ──────────────────────
 import numpy as np
 import pandas as pd
+
 import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
@@ -45,13 +43,18 @@ from transformers import (
 )
 from peft import PeftModel
 
-# ── Set HuggingFace cache ───────────────────────────────────────────────────
-CACHE_DIR = r"D:\nckh_teacher_student\code\teacher_student\.hf_cache"
-os.environ["HF_HOME"] = CACHE_DIR
-os.environ["HF_DATASETS_CACHE"] = os.path.join(CACHE_DIR, "datasets")
-os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(CACHE_DIR, "hub")
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from rouge_score import rouge_scorer
+
+# ── Set HuggingFace cache (dynamic relative to project root) ───────────────
+project_root = Path(__file__).parent.parent
+CACHE_DIR = project_root / ".hf_cache"
+os.environ["HF_HOME"] = str(CACHE_DIR)
+os.environ["HF_DATASETS_CACHE"] = str(CACHE_DIR / "datasets")
+os.environ["HUGGINGFACE_HUB_CACHE"] = str(CACHE_DIR / "hub")
 
 MODEL_NAME = "Qwen/Qwen2.5-VL-3B-Instruct"
+MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -357,29 +360,51 @@ def evaluate_model_zeroshot(model, processor, test_df, image_root, rouge_scr, de
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, choices=["icl", "nonicl"], required=True,
-                        help="Mode: icl or nonicl (selects global_adapter_icl or global_adapter_nonicl)")
+    parser.add_argument("--mode", type=str, required=True,
+                        help="Script name suffix from federated training (e.g., 01_train_client_mrag_kd)")
+    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
+    parser.add_argument("--alpha", type=float, default=0.1)
+    parser.add_argument("--k", type=int, default=2)
     parser.add_argument("--global_adapter", type=str, default=None, help="Path to server/global_adapter (auto-generated if not provided)")
-    parser.add_argument("--roco_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\ROCO\roco_reasoning_train.csv")
-    parser.add_argument("--roco_image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\ROCO\train\images", help="Path to ROCO images")
-    parser.add_argument("--slake_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\Slake\slake_closed_reasoning.csv", help="Path to Slake reasoning CSV")
-    parser.add_argument("--slake_image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\Slake\images", help="Path to Slake images (extracted imgs.zip)")
+    parser.add_argument("--roco_csv", type=str, default=None, help="Path to ROCO reasoning CSV (auto-generated if not provided)")
+    parser.add_argument("--roco_image_root", type=str, default=None, help="Path to ROCO images (auto-generated if not provided)")
+    parser.add_argument("--slake_csv", type=str, default=None, help="Path to Slake reasoning CSV (auto-generated if not provided)")
+    parser.add_argument("--slake_image_root", type=str, default=None, help="Path to Slake images (auto-generated if not provided)")
     parser.add_argument("--out_dir", type=str, default=None, help="Output directory (auto-generated if not provided)")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=1)
-    parser.add_argument("--test_csv", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\VQA-RAD\centralized\test.csv")
-    parser.add_argument("--image_root", type=str, default=r"D:\nckh_teacher_student\code\teacher_student\processed_data\VQA-RAD\centralized")
+    parser.add_argument("--test_csv", type=str, default=None, help="Path to VQA-RAD test CSV (auto-generated if not provided)")
+    parser.add_argument("--image_root", type=str, default=None, help="Path to VQA-RAD images (auto-generated if not provided)")
     parser.add_argument("--grad_accum", type=int, default=8)
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     # Auto-generate paths if not provided
-    base_path = Path(r"D:\nckh_teacher_student\code\teacher_student\experiments\VQA-RAD\noniid\alpha_0.1\k2\Qwen2.5-VL-3B-Instruct\server")
+    base = Path("experiments") / args.dataset / args.setting
+    if args.setting == "noniid":
+        base = base / f"alpha_{args.alpha}"
+    base = base / f"k{args.k}" / MODEL_SHORT / "server"
+    
+    data_root = Path("processed_data")
+    
     if args.global_adapter is None:
-        args.global_adapter = str(base_path / f"global_adapter_{args.mode}")
+        args.global_adapter = str(base / f"global_adapter_{args.mode}")
     if args.out_dir is None:
-        args.out_dir = str(base_path / f"global_adapter_roco_slake_{args.mode}")
+        args.out_dir = str(base / f"global_adapter_roco_slake_{args.mode}")
+    if args.roco_csv is None:
+        args.roco_csv = str(data_root / "ROCO" / "roco_reasoning_train.csv")
+    if args.roco_image_root is None:
+        args.roco_image_root = str(data_root / "ROCO" / "train" / "images")
+    if args.slake_csv is None:
+        args.slake_csv = str(data_root / "Slake" / "slake_closed_reasoning.csv")
+    if args.slake_image_root is None:
+        args.slake_image_root = str(data_root / "Slake" / "images")
+    if args.test_csv is None:
+        args.test_csv = str(data_root / "VQA-RAD" / "centralized" / "test.csv")
+    if args.image_root is None:
+        args.image_root = str(data_root / "VQA-RAD" / "centralized")
 
     set_seed(args.seed)
     out_dir = Path(args.out_dir)
