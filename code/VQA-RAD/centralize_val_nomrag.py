@@ -39,8 +39,7 @@ os.environ["HF_HOME"] = str(CACHE_DIR)
 os.environ["HF_DATASETS_CACHE"] = str(CACHE_DIR / "datasets")
 os.environ["HUGGINGFACE_HUB_CACHE"] = str(CACHE_DIR / "hub")
 
-MODEL_NAME = "Qwen/Qwen2.5-VL-3B-Instruct"
-MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
+
 
 # Load medical embedding model for hallucination detection
 similarity_model = SentenceTransformer('NeuML/pubmedbert-base-embeddings')
@@ -137,6 +136,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--adapter_dir", type=str, default=None,
                         help="Path to centralized non-RAG adapter directory")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+                        help="Base VLM model path/name on HF")
     parser.add_argument("--test_csv", type=str, default=None,
                         help="Path to VQA-RAD test CSV")
     parser.add_argument("--image_root", type=str, default=None,
@@ -146,8 +147,9 @@ def main():
     args = parser.parse_args()
 
     # Dynamic default paths relative to PROJECT_ROOT
+    model_short = args.model_name.split("/")[-1]
     if args.adapter_dir is None:
-        args.adapter_dir = str(PROJECT_ROOT / "experiments" / "VQA-RAD" / "centralized" / "Qwen2.5-VL-3B-Instruct" / "nomrag")
+        args.adapter_dir = str(PROJECT_ROOT / "experiments" / "VQA-RAD" / "centralized" / model_short / "nomrag")
     if args.test_csv is None:
         args.test_csv = str(PROJECT_ROOT / "processed_data" / "VQA-RAD" / "centralized" / "test.csv")
     if args.image_root is None:
@@ -166,11 +168,11 @@ def main():
     log(f"Test samples: {len(test_df)}")
 
     # ── Step 1: Load VLM and Adapter ──────────────────────────────────────────
-    log(f"Loading processor and base model {MODEL_NAME}...")
-    processor = AutoProcessor.from_pretrained(MODEL_NAME, min_pixels=128*28*28, max_pixels=256*28*28, cache_dir=CACHE_DIR)
+    log(f"Loading processor and base model {args.model_name}...")
+    processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=128*28*28, max_pixels=256*28*28, cache_dir=CACHE_DIR)
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    if "qwen2.5" in MODEL_NAME.lower():
+    if "qwen2.5" in args.model_name.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass
@@ -184,7 +186,7 @@ def main():
     )
 
     base_model = ModelClass.from_pretrained(
-        MODEL_NAME,
+        args.model_name,
         quantization_config=bnb_config,
         torch_dtype=torch_dtype,
         device_map="auto",

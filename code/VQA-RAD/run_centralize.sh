@@ -26,8 +26,10 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CODE_DIR="${SCRIPT_DIR}"
 
 # ── Configurable parameters (override via env vars) ─────────────────────────
-MODEL_NAME="${MODEL_NAME:-Qwen/Qwen2.5-VL-3B-Instruct}"
-MODEL_SHORT="${MODEL_SHORT:-Qwen2.5-VL-3B-Instruct}"
+# MODEL_NAME="${MODEL_NAME:-Qwen/Qwen2.5-VL-3B-Instruct}"
+# MODEL_SHORT="${MODEL_SHORT:-Qwen2.5-VL-3B-Instruct}"
+MODEL_NAME="${MODEL_NAME:-Qwen/Qwen2-VL-2B-Instruct}"
+MODEL_SHORT="${MODEL_SHORT:-Qwen2-VL-2B-Instruct}"
 DATASET="${DATASET:-VQA-RAD}"
 SETTING="${SETTING:-centralized}"
 DATA_DIR="${DATA_DIR:-${PROJECT_ROOT}/processed_data/${DATASET}/${SETTING}}"
@@ -207,6 +209,7 @@ else
     STEP_START=$(date +%s)
     uv run "${CODE_DIR}/centralize_val_nomrag.py" \
         --adapter_dir "${NOMRAG_OUTPUT}" \
+        --model_name "${MODEL_NAME}" \
         --test_csv "${DATA_DIR}/test.csv" \
         --image_root "${DATA_DIR}" \
         2>&1 | tee "${NOMRAG_OUTPUT}/val/val.log"
@@ -268,6 +271,7 @@ else
     STEP_START=$(date +%s)
     uv run "${CODE_DIR}/centralize_val_mrag.py" \
         --adapter_dir "${MRAG_OUTPUT}" \
+        --model_name "${MODEL_NAME}" \
         --train_csv "${DATA_DIR}/train.csv" \
         --test_csv "${DATA_DIR}/test.csv" \
         --image_root "${DATA_DIR}" \
