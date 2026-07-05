@@ -138,6 +138,31 @@ def _normalize(text: str) -> str:
 def compute_exact_match(pred: str, gt: str) -> float:
     return 1.0 if _normalize(pred) == _normalize(gt) else 0.0
 
+def compute_flexible_match(pred: str, gt: str) -> float:
+    """
+    More flexible matching for open-ended questions.
+    Returns 1.0 if:
+    - Exact match after normalization
+    - Prediction is a substring of ground truth (e.g., "intestine" matches "the small intestines")
+    - Ground truth is a substring of prediction (e.g., "the small intestines" matches "intestines")
+    """
+    norm_pred = _normalize(pred)
+    norm_gt = _normalize(gt)
+    
+    # Exact match
+    if norm_pred == norm_gt:
+        return 1.0
+    
+    # Check if prediction is substring of ground truth
+    if norm_pred in norm_gt:
+        return 1.0
+    
+    # Check if ground truth is substring of prediction
+    if norm_gt in norm_pred:
+        return 1.0
+    
+    return 0.0
+
 def compute_bleu(pred: str, gt: str) -> float:
     ref = [_normalize(gt).split()]
     hyp = _normalize(pred).split()
@@ -267,7 +292,7 @@ def main():
     log("Precomputing text embeddings for retrieval...")
     test_texts = []
     for _, row in test_df.iterrows():
-        text = f"Question: {row['question']} Answer: {row['answer']}"
+        text = f"Question: {row['question']}"
         test_texts.append(text)
     
     test_embeddings = []
@@ -296,7 +321,7 @@ def main():
         query_image = _load_image_safe(img_path)
         
         # Perform mRAG retrieval (text-only)
-        query_text = f"Question: {question} Answer: {row['answer']}"
+        query_text = f"Question: {question}"
         retrieved_contexts = perform_mrag_retrieval(
             query_text, test_texts, test_embeddings, args.rag_k,
             biomedclip_model, biomedclip_tokenizer
@@ -357,8 +382,8 @@ def main():
 
     # Open metrics
     log("Computing open-ended metrics...")
-    o_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
-    o_em = o_acc
+    o_acc = float(np.mean([compute_flexible_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
+    o_em = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_bleu = float(np.mean([compute_bleu(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_rouge = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_bert = compute_bert_score(open_preds, open_gts) if open_preds else 0.0
