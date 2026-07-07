@@ -70,7 +70,7 @@ def rouge_l(pred, gt):
 # =========================
 # LOAD DATA
 # =========================
-df = pd.read_csv("/home/vinh/Documents/teacher_student/code/VQA-RAD/results/best_predictions.csv")
+df = pd.read_csv(r"best_predictions.csv")
 
 df = df.dropna(subset=["prediction", "answer"])
 
