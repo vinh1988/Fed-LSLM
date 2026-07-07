@@ -19,7 +19,6 @@ from safetensors.torch import load_file, save_file
 # CONFIG
 # =========================================================
 
-MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
 DEVICE = "cpu"
 
 
@@ -82,6 +81,8 @@ def main():
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
+    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+                        help="Short model name for directory naming")
     parser.add_argument("--clients_dir", type=str, default=None,
                         help="Path to clients directory (auto-generated if not provided)")
     parser.add_argument("--output_dir", type=str, default=None,
@@ -92,7 +93,7 @@ def main():
     base = Path("experiments") / args.dataset / args.setting
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
-    base = base / f"k{args.k}" / MODEL_SHORT
+    base = base / f"k{args.k}" / args.model_short
     
     if args.clients_dir is None:
         args.clients_dir = str(base / "clients")

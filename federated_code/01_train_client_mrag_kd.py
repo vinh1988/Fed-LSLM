@@ -71,8 +71,6 @@ from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 
 # ── Constants ───────────────────────────────────────────────────────────────
-MODEL_NAME  = "Qwen/Qwen2.5-VL-3B-Instruct"
-MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
 BIOMED_MODEL = "hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
 
 
@@ -93,7 +91,7 @@ def set_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
-def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int) -> Path:
+def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int, model_short: str) -> Path:
     """
     Construct the experiment output directory following the Experiment Space spec:
         experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/{model}/clients/client_{id}_scriptname/
@@ -104,7 +102,7 @@ def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int) 
         if alpha is None:
             raise ValueError("--alpha must be set for noniid setting")
         base = base / f"alpha_{alpha}"
-    base = base / f"k{k}" / MODEL_SHORT / "clients" / f"client_{client_id}_{script_name}"
+    base = base / f"k{k}" / model_short / "clients" / f"client_{client_id}_{script_name}"
     return base
 
 
@@ -528,7 +526,7 @@ def train_single_client(args, client_id: int):
     client_csv, test_csv, image_root = resolve_data_paths(
         args.dataset, args.setting, args.alpha, args.k, client_id
     )
-    out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id)
+    out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id, args.model_short)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     alpha_str = f"alpha_{args.alpha}" if args.alpha is not None else "N/A"
@@ -636,9 +634,9 @@ def train_single_client(args, client_id: int):
         else torch.float16
     )
 
-    log(f"Loading processor & VLM: {MODEL_NAME}...")
+    log(f"Loading processor & VLM: {args.model_name}...")
     processor = AutoProcessor.from_pretrained(
-        MODEL_NAME,
+        args.model_name,
         min_pixels=128 * 28 * 28,
         max_pixels=256 * 28 * 28,
         cache_dir=CACHE_DIR,
@@ -647,13 +645,13 @@ def train_single_client(args, client_id: int):
     if processor.tokenizer.pad_token is None:
         processor.tokenizer.pad_token = processor.tokenizer.eos_token
 
-    if "qwen2.5" in MODEL_NAME.lower():
+    if "qwen2.5" in args.model_name.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
     base_model = ModelClass.from_pretrained(
-        MODEL_NAME,
+        args.model_name,
         torch_dtype=torch_dtype,
         device_map="auto",
         cache_dir=CACHE_DIR,
@@ -821,7 +819,7 @@ def train_single_client(args, client_id: int):
         "alpha":             args.alpha,
         "k":                 args.k,
         "client_id":         client_id,
-        "model":             MODEL_SHORT,
+        "model":             args.model_short,
         "epochs":            args.epochs,
         "lr":                args.lr,
         "batch_size":        args.batch_size,
@@ -891,6 +889,10 @@ def main():
                         help="Dirichlet alpha for noniid (e.g. 0.5, 0.1)")
     parser.add_argument("--k",       type=int,   default=3,
                         help="Total number of clients")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+                        help="VLM model name from HuggingFace")
+    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+                        help="Short model name for directory naming")
 
     # ── RAG retrieval ────────────────────────────────────────────────────────
     parser.add_argument("--rag_k",     type=int, default=3,

@@ -53,8 +53,7 @@ os.environ["HF_HOME"] = str(CACHE_DIR)
 os.environ["HF_DATASETS_CACHE"] = str(CACHE_DIR / "datasets")
 os.environ["HUGGINGFACE_HUB_CACHE"] = str(CACHE_DIR / "hub")
 
-MODEL_NAME = "Qwen/Qwen2.5-VL-3B-Instruct"
-MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
+# ── Constants ───────────────────────────────────────────────────────────────
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -366,6 +365,10 @@ def main():
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+                        help="VLM model name from HuggingFace")
+    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+                        help="Short model name for directory naming")
     parser.add_argument("--global_adapter", type=str, default=None, help="Path to server/global_adapter (auto-generated if not provided)")
     parser.add_argument("--roco_csv", type=str, default=None, help="Path to ROCO reasoning CSV (auto-generated if not provided)")
     parser.add_argument("--roco_image_root", type=str, default=None, help="Path to ROCO images (auto-generated if not provided)")
@@ -385,7 +388,7 @@ def main():
     base = Path("experiments") / args.dataset / args.setting
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
-    base = base / f"k{args.k}" / MODEL_SHORT / "server"
+    base = base / f"k{args.k}" / args.model_short / "server"
     
     data_root = Path("processed_data")
     
@@ -443,21 +446,21 @@ def main():
     )
     
     # 2. Load Processor and Base Model
-    log(f"Loading base model {MODEL_NAME}...")
-    processor = AutoProcessor.from_pretrained(MODEL_NAME, min_pixels=128 * 28 * 28, max_pixels=256 * 28 * 28, cache_dir=CACHE_DIR)
+    log(f"Loading base model {args.model_name}...")
+    processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=128 * 28 * 28, max_pixels=256 * 28 * 28, cache_dir=CACHE_DIR)
     processor.tokenizer.padding_side = "right"
     if processor.tokenizer.pad_token is None:
         processor.tokenizer.pad_token = processor.tokenizer.eos_token
 
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    if "qwen2.5" in MODEL_NAME.lower():
+    if "qwen2.5" in args.model_name.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
     base_model = ModelClass.from_pretrained(
-        MODEL_NAME,
+        args.model_name,
         torch_dtype=torch_dtype,
         device_map="auto",
         cache_dir=CACHE_DIR

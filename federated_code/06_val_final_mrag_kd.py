@@ -39,9 +39,6 @@ os.environ["HF_HOME"] = str(CACHE_DIR)
 os.environ["HF_DATASETS_CACHE"] = str(CACHE_DIR / "datasets")
 os.environ["HUGGINGFACE_HUB_CACHE"] = str(CACHE_DIR / "hub")
 
-MODEL_NAME = "Qwen/Qwen2.5-VL-3B-Instruct"
-MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
-
 # Load medical embedding model for hallucination detection
 similarity_model = SentenceTransformer('NeuML/pubmedbert-base-embeddings')
 
@@ -227,6 +224,10 @@ def main():
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+                        help="VLM model name from HuggingFace")
+    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+                        help="Short model name for directory naming")
     parser.add_argument("--rag_k", type=int, default=3,
                         help="Number of retrieved cases for mRAG context")
     parser.add_argument("--global_adapter_final", type=str, default=None,
@@ -243,7 +244,7 @@ def main():
     base = Path("experiments") / args.dataset / args.setting
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
-    base = base / f"k{args.k}" / MODEL_SHORT
+    base = base / f"k{args.k}" / args.model_short
     data_root = Path("processed_data")
     
     if args.global_adapter_final is None:
@@ -265,16 +266,16 @@ def main():
     image_root = Path(args.image_root)
     log(f"Test samples: {len(test_df)}")
     
-    log(f"Loading processor and base model {MODEL_NAME}...")
-    processor = AutoProcessor.from_pretrained(MODEL_NAME, min_pixels=128*28*28, max_pixels=256*28*28, cache_dir=CACHE_DIR)
+    log(f"Loading processor and base model {args.model_name}...")
+    processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=128*28*28, max_pixels=256*28*28, cache_dir=CACHE_DIR)
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    if "qwen2.5" in MODEL_NAME.lower():
+    if "qwen2.5" in args.model_name.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
-    base_model = ModelClass.from_pretrained(MODEL_NAME, torch_dtype=torch_dtype, device_map="auto", cache_dir=CACHE_DIR)
+    base_model = ModelClass.from_pretrained(args.model_name, torch_dtype=torch_dtype, device_map="auto", cache_dir=CACHE_DIR)
     
     log(f"Loading global adapter final: {args.global_adapter_final}...")
     model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter_final)))

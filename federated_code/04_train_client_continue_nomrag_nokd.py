@@ -494,7 +494,7 @@ def main():
             log(f"[Client {client_id}] Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
             
             # Eval at end of epoch
-            metrics = evaluate_model(model, processor, test_df, test_contexts, Path(image_root), rouge_scr, device, desc=f"Eval Epoch {epoch}")
+            metrics = evaluate_model(model, processor, test_df, Path(image_root), rouge_scr, device, desc=f"Eval Epoch {epoch}")
             log(f"[Client {client_id}] Epoch {epoch} | Closed Acc={metrics['closed-ended']['Accuracy']:.4f} | Open ROUGE-L={metrics['open-ended']['ROUGE-L']:.4f}")
             
             if metrics["closed-ended"]["Accuracy"] > best_closed_acc:

@@ -48,8 +48,6 @@ from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 
 # ── Constants ───────────────────────────────────────────────────────────────
-MODEL_NAME  = "Qwen/Qwen2.5-VL-3B-Instruct"
-MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
 BIOMED_MODEL = "hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
 
 def log(msg: str):
@@ -388,14 +386,14 @@ def evaluate_model(model, processor, test_df, test_contexts, image_root, rouge_s
 # Main Training Loop
 # ──────────────────────────────────────────────────────────────────────────────
 
-def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int) -> Path:
+def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int, model_short: str) -> Path:
     script_name = Path(__file__).stem
     base = Path("experiments") / dataset / setting
     if setting == "noniid":
         if alpha is None:
             raise ValueError("--alpha must be set for noniid setting")
         base = base / f"alpha_{alpha}"
-    base = base / f"k{k}" / MODEL_SHORT / "clients" / f"client_{client_id}_{script_name}"
+    base = base / f"k{k}" / model_short / "clients" / f"client_{client_id}_{script_name}"
     return base
 
 def resolve_data_paths(dataset: str, setting: str, alpha, k: int, client_id: int):
@@ -423,6 +421,10 @@ def main():
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+                        help="VLM model name from HuggingFace")
+    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+                        help="Short model name for directory naming")
     parser.add_argument("--global_adapter_roco_slake", type=str, default=None,
                         help="Path to global adapter from ROCO/SLAKE training (auto-generated if not provided)")
     parser.add_argument("--rag_k", type=int, default=3,
@@ -441,7 +443,7 @@ def main():
     base = Path("experiments") / args.dataset / args.setting
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
-    base = base / f"k{args.k}" / MODEL_SHORT / "server"
+    base = base / f"k{args.k}" / args.model_short / "server"
     
     if args.global_adapter_roco_slake is None:
         args.global_adapter_roco_slake = str(base / f"global_adapter_roco_slake_{args.roco_slake_mode}")
@@ -456,21 +458,21 @@ def main():
     log(f"Device: {device} | GPU: {gpu_static['gpu_name']} | VRAM: {gpu_static['total_vram_gb']} GB")
 
     # 1. Load Processor and Base Model ONCE
-    log(f"Loading base model {MODEL_NAME}...")
-    processor = AutoProcessor.from_pretrained(MODEL_NAME, min_pixels=128 * 28 * 28, max_pixels=256 * 28 * 28)
+    log(f"Loading base model {args.model_name}...")
+    processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=128 * 28 * 28, max_pixels=256 * 28 * 28)
     processor.tokenizer.padding_side = "right"
     if processor.tokenizer.pad_token is None:
         processor.tokenizer.pad_token = processor.tokenizer.eos_token
 
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    if "qwen2.5" in MODEL_NAME.lower():
+    if "qwen2.5" in args.model_name.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
     base_model = ModelClass.from_pretrained(
-        MODEL_NAME,
+        args.model_name,
         torch_dtype=torch_dtype,
         device_map="auto"
     )
@@ -495,7 +497,7 @@ def main():
         model.load_state_dict(global_state_dict, strict=False)
 
         client_csv, test_csv, image_root = resolve_data_paths(args.dataset, args.setting, args.alpha, args.k, client_id)
-        out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id)
+        out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id, args.model_short)
         out_dir.mkdir(parents=True, exist_ok=True)
         
         train_df = pd.read_csv(client_csv)

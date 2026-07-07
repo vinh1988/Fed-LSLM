@@ -21,6 +21,16 @@ ALPHA=0.1
 K=2
 MODE="04_train_client_continue_mrag_kd"
 ROCO_SLAKE_MODE="01_train_client_mrag_kd"  # Mode for ROCO+Slake adapter from step 03
+MODEL_VERSION="2.5"  # Options: "2" or "2.5"
+
+# Set model based on version
+if [ "$MODEL_VERSION" = "2" ]; then
+    MODEL_NAME="Qwen/Qwen2-VL-2B-Instruct"
+    MODEL_SHORT="Qwen2-VL-2B-Instruct"
+else
+    MODEL_NAME="Qwen/Qwen2.5-VL-3B-Instruct"
+    MODEL_SHORT="Qwen2.5-VL-3B-Instruct"
+fi
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -49,6 +59,26 @@ while [[ $# -gt 0 ]]; do
             ROCO_SLAKE_MODE="$2"
             shift 2
             ;;
+        --model_version)
+            MODEL_VERSION="$2"
+            # Update model based on version
+            if [ "$MODEL_VERSION" = "2" ]; then
+                MODEL_NAME="Qwen/Qwen2-VL-2B-Instruct"
+                MODEL_SHORT="Qwen2-VL-2B-Instruct"
+            else
+                MODEL_NAME="Qwen/Qwen2.5-VL-3B-Instruct"
+                MODEL_SHORT="Qwen2.5-VL-3B-Instruct"
+            fi
+            shift 2
+            ;;
+        --model_name)
+            MODEL_NAME="$2"
+            shift 2
+            ;;
+        --model_short)
+            MODEL_SHORT="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -58,6 +88,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --k K                   Number of clients (default: 2)"
             echo "  --mode MODE              Script name suffix (default: 04_train_client_continue_mrag_kd)"
             echo "  --roco_slake_mode MODE   ROCO+Slake adapter mode from step 03 (default: 01_train_client_mrag_kd)"
+            echo "  --model_version VERSION  Qwen version: 2 or 2.5 (default: 2.5)"
+            echo "  --model_name MODEL_NAME  VLM model name from HuggingFace (auto-set by model_version by default)"
+            echo "  --model_short MODEL_SHORT Short model name for directory naming (auto-set by model_version by default)"
             echo "  --help                  Show this help message"
             exit 0
             ;;
@@ -75,7 +108,7 @@ EXPERIMENTS_DIR="$PROJECT_ROOT/experiments/$DATASET/$SETTING"
 if [ "$SETTING" = "noniid" ]; then
     EXPERIMENTS_DIR="$EXPERIMENTS_DIR/alpha_$ALPHA"
 fi
-EXPERIMENTS_DIR="$EXPERIMENTS_DIR/k${K}/Qwen2.5-VL-3B-Instruct"
+EXPERIMENTS_DIR="$EXPERIMENTS_DIR/k${K}/$MODEL_SHORT"
 SERVER_DIR="$EXPERIMENTS_DIR/server"
 CLIENTS_DIR="$EXPERIMENTS_DIR/clients"
 
@@ -91,6 +124,8 @@ echo "Setting: $SETTING"
 echo "Alpha: $ALPHA"
 echo "K: $K"
 echo "Mode: $MODE"
+echo "Model: $MODEL_NAME"
+echo "Model Short: $MODEL_SHORT"
 echo "Log file: $LOG_FILE"
 echo "=============================================================================="
 echo ""
@@ -158,7 +193,7 @@ else
     echo ""
     
     cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/01_train_client_mrag_kd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K"; then
+    if eval "uv run $FEDERATED_CODE/01_train_client_mrag_kd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
         echo "[SUCCESS] Federated Client Training (mRAG with KD, 1 epoch) completed"
         echo ""
     else
@@ -172,7 +207,7 @@ fi
 # STEP 02: Federated Averaging
 # ==============================================================================
 STEP02_OUTPUT="$SERVER_DIR/global_adapter_01_train_client_mrag_kd"
-STEP02_CMD="uv run $FEDERATED_CODE/02_fedavg.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --mode 01_train_client_mrag_kd"
+STEP02_CMD="uv run $FEDERATED_CODE/02_fedavg.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --mode 01_train_client_mrag_kd --model_short $MODEL_SHORT"
 
 run_step "02" "Federated Averaging" "$STEP02_CMD" "$STEP02_OUTPUT"
 
@@ -180,7 +215,7 @@ run_step "02" "Federated Averaging" "$STEP02_CMD" "$STEP02_OUTPUT"
 # STEP 03: Knowledge Distillation (ROCO + Slake)
 # ==============================================================================
 STEP03_OUTPUT="$SERVER_DIR/global_adapter_roco_slake_01_train_client_mrag_kd"
-STEP03_CMD="uv run $FEDERATED_CODE/03_train_kd_roco_slake.py --mode 01_train_client_mrag_kd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K"
+STEP03_CMD="uv run $FEDERATED_CODE/03_train_kd_roco_slake.py --mode 01_train_client_mrag_kd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
 
 run_step "03" "Knowledge Distillation (ROCO + Slake)" "$STEP03_CMD" "$STEP03_OUTPUT"
 
@@ -203,7 +238,7 @@ else
     echo ""
     
     cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/04_train_client_continue_mrag_kd.py --mode $MODE --roco_slake_mode $ROCO_SLAKE_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K"; then
+    if eval "uv run $FEDERATED_CODE/04_train_client_continue_mrag_kd.py --mode $MODE --roco_slake_mode $ROCO_SLAKE_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
         echo "[SUCCESS] Continue Training on VQA-RAD completed"
         echo ""
     else
@@ -217,7 +252,7 @@ fi
 # STEP 05: Final Federated Averaging
 # ==============================================================================
 STEP05_OUTPUT="$SERVER_DIR/global_adapter_${MODE}"
-STEP05_CMD="uv run $FEDERATED_CODE/05_fedavg_final_mrag_kd.py --mode $MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K"
+STEP05_CMD="uv run $FEDERATED_CODE/05_fedavg_final_mrag_kd.py --mode $MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_short $MODEL_SHORT"
 
 run_step "05" "Final Federated Averaging" "$STEP05_CMD" "$STEP05_OUTPUT"
 
@@ -225,7 +260,7 @@ run_step "05" "Final Federated Averaging" "$STEP05_CMD" "$STEP05_OUTPUT"
 # STEP 06: Final Validation
 # ==============================================================================
 STEP06_OUTPUT="$EXPERIMENTS_DIR/final_val_${MODE}"
-STEP06_CMD="uv run $FEDERATED_CODE/06_val_final_mrag_kd.py --mode $MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --rag_k 3"
+STEP06_CMD="uv run $FEDERATED_CODE/06_val_final_mrag_kd.py --mode $MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT --rag_k 3"
 
 run_step "06" "Final Validation" "$STEP06_CMD" "$STEP06_OUTPUT"
 
