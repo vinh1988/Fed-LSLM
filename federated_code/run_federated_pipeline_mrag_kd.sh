@@ -140,12 +140,33 @@ run_step() {
 }
 
 # ==============================================================================
-# STEP 01: Federated Client Training
+# STEP 01: Federated Client Training (1 epoch, mRAG with KD)
 # ==============================================================================
-STEP01_OUTPUT="$CLIENTS_DIR"
-STEP01_CMD="uv run $FEDERATED_CODE/01_train_client_mrag_kd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K"
+echo "=============================================================================="
+echo "STEP 01: Federated Client Training (mRAG with KD, 1 epoch)"
+echo "=============================================================================="
 
-run_step "01" "Federated Client Training" "$STEP01_CMD" "$STEP01_OUTPUT"
+# Check for specific client directories from step 01
+STEP01_CHECK_PATTERN="$CLIENTS_DIR/client_*_01_train_client_mrag_kd"
+STEP01_HAS_OUTPUT=$(ls -d $STEP01_CHECK_PATTERN 2>/dev/null | wc -l)
+if [ "$STEP01_HAS_OUTPUT" -gt 0 ]; then
+    echo "[RESUME] Federated Client Training (mRAG with KD, 1 epoch) already completed"
+    echo "[RESUME] Found $STEP01_HAS_OUTPUT client directories matching pattern: $STEP01_CHECK_PATTERN"
+    echo "[RESUME] Skipping Federated Client Training (mRAG with KD, 1 epoch) (use --force to override)"
+else
+    echo "[START] Running Federated Client Training (mRAG with KD, 1 epoch)"
+    echo ""
+    
+    cd "$PROJECT_ROOT"
+    if eval "uv run $FEDERATED_CODE/01_train_client_mrag_kd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K"; then
+        echo "[SUCCESS] Federated Client Training (mRAG with KD, 1 epoch) completed"
+        echo ""
+    else
+        echo "[ERROR] Federated Client Training (mRAG with KD, 1 epoch) failed"
+        echo "[ERROR] Check log: $LOG_FILE"
+        exit 1
+    fi
+fi
 
 # ==============================================================================
 # STEP 02: Federated Averaging

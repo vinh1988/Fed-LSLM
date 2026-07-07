@@ -15,7 +15,6 @@ import shutil
 
 from safetensors.torch import load_file, save_file
 
-MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
 SCRIPT_NAME = Path(__file__).stem
 
 def main():
@@ -26,6 +25,8 @@ def main():
     parser.add_argument("--k", type=int, default=2)
     parser.add_argument("--mode", type=str, default=None,
                         help="Script name suffix (e.g., icl, nonicl, icl_nokd, 01_train_client_mrag_kd). If not provided, uses this script's name.")
+    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+                        help="Short model name for directory naming")
     args = parser.parse_args()
 
     # Use provided mode or default to this script's name
@@ -35,7 +36,7 @@ def main():
     base = Path("experiments") / args.dataset / args.setting
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
-    base = base / f"k{args.k}" / MODEL_SHORT
+    base = base / f"k{args.k}" / args.model_short
 
     # Build client paths with suffix
     client_paths = []
