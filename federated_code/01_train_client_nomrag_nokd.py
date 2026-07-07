@@ -2,10 +2,9 @@
 """
 train_local_client.py
 
-Local-client training script for Federated Learning with mRAG (Multimodal RAG).
+Local-client training script for Federated Learning without RAG.
 
 Architecture:
-  - BiomedCLIP  : frozen image+text encoder → FAISS retrieval on client's own data.
   - Qwen2-VL-2B-Instruct + LoRA : answer generator (bfloat16, base frozen, only LoRA adapters trained).
 
 Output structure (per Experiment Space spec):
@@ -52,11 +51,9 @@ os.environ["HUGGINGFACE_HUB_CACHE"] = r"D:\nckh_teacher_student\code\teacher_stu
 
 import torch
 from torch.utils.data import Dataset, DataLoader
-import faiss
 from PIL import Image
 from tqdm import tqdm
 
-import open_clip
 from transformers import (
     AutoProcessor,
     get_linear_schedule_with_warmup,
@@ -68,9 +65,6 @@ from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 
 # ── Constants ───────────────────────────────────────────────────────────────
-MODEL_NAME  = "Qwen/Qwen2.5-VL-3B-Instruct"
-MODEL_SHORT = "Qwen2.5-VL-3B-Instruct"
-BIOMED_MODEL = "hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -90,20 +84,20 @@ def set_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
-def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int) -> Path:
+def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int, model_short: str) -> Path:
     """
-    Construct the experiment output directory for federated aggregation (ICL without KD):
-        experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/{model}/clients/client_{id}_icl_nokd/
+    Construct the experiment output directory for federated aggregation (no RAG without KD):
+        experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/{model}/clients/client_{id}_01_train_client_nomrag_nokd/
     
-    This uses _icl_nokd suffix to distinguish from FL with KD workflow (which uses _icl).
-    For aggregation, use mode=icl_nokd in 02_fedavg.py.
+    This uses _nomrag_nokd suffix to distinguish from RAG workflows.
+    For aggregation, use mode=01_train_client_nomrag_nokd in 02_fedavg.py.
     """
     base = Path("experiments") / dataset / setting
     if setting == "noniid":
         if alpha is None:
             raise ValueError("--alpha must be set for noniid setting")
         base = base / f"alpha_{alpha}"
-    base = base / f"k{k}" / MODEL_SHORT / "clients" / f"client_{client_id}_icl_nokd"
+    base = base / f"k{k}" / model_short / "clients" / f"client_{client_id}_01_train_client_nomrag_nokd"
     return base
 
 
@@ -158,73 +152,13 @@ def sample_gpu_memory_gb() -> float:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# BiomedCLIP Embeddings
-# ──────────────────────────────────────────────────────────────────────────────
-
-def precompute_embeddings(csv_path: Path, image_root: Path, model, preprocess, tokenizer, device) -> np.ndarray:
-    df = pd.read_csv(csv_path)
-    embeddings = []
-
-    for _, row in tqdm(df.iterrows(), total=len(df), desc=f"Embedding {csv_path.name}"):
-        img_path = image_root / row["image_path"]
-        question = str(row["question"])
-
-        try:
-            image = Image.open(img_path).convert("RGB")
-            image_input = preprocess(image).unsqueeze(0).to(device)
-        except Exception as e:
-            log(f"Warning: failed to load image {img_path}: {e}. Using zeros.")
-            image_input = torch.zeros(1, 3, 224, 224).to(device)
-
-        text_input = tokenizer([question]).to(device)
-
-        with torch.no_grad():
-            img_feat  = model.encode_image(image_input)
-            text_feat = model.encode_text(text_input)
-            img_feat  = img_feat  / img_feat.norm(dim=-1, keepdim=True)
-            text_feat = text_feat / text_feat.norm(dim=-1, keepdim=True)
-            combined  = torch.cat([img_feat, text_feat], dim=-1)
-            embeddings.append(combined.cpu().numpy()[0])
-
-    return np.array(embeddings)
-
-
-def l2_normalize(x: np.ndarray) -> np.ndarray:
-    norms = np.linalg.norm(x, axis=1, keepdims=True)
-    return x / np.where(norms == 0, 1.0, norms)
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# RAG context formatting
-# ──────────────────────────────────────────────────────────────────────────────
-
-def format_retrieved_knowledge(df: pd.DataFrame, indices, scores=None):
-    docs = []
-    if scores is None:
-        scores = [0.0] * len(indices)
-    for rank, (idx, score) in enumerate(zip(indices, scores), 1):
-        row = df.iloc[idx]
-        docs.append(f"Top-{rank}:\nScore: {score:.4f}\nQuestion: {row['question']}\nAnswer: {row['answer']}\n")
-    return docs
-
-
-def get_retrieved_image_paths(df: pd.DataFrame, indices):
-    return [df.iloc[idx]["image_path"] for idx in indices]
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Dataset & collate
 # ──────────────────────────────────────────────────────────────────────────────
 
 class MedVQADataset(Dataset):
-    def __init__(self, df: pd.DataFrame, retrieved_contexts, retrieved_image_paths,
-                 image_root: Path, k_examples=3, max_length: int = 512):
+    def __init__(self, df: pd.DataFrame, image_root: Path):
         self.df = df.reset_index(drop=True)
-        self.retrieved_contexts    = retrieved_contexts
-        self.retrieved_image_paths = retrieved_image_paths
         self.image_root = image_root
-        self.k_examples = k_examples
-        self.max_length = max_length
 
     def __len__(self):
         return len(self.df)
@@ -242,72 +176,49 @@ class MedVQADataset(Dataset):
         q_type_raw   = str(row.get("question_type", "open")).lower()
         question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
         
-        # Sample k examples of the SAME question type
-        same_type_indices = [
-            i for i in range(len(self.df)) 
-            if i != idx and str(self.df.iloc[i].get("question_type", "open")).lower() == q_type_raw
-        ]
-        example_indices = random.sample(same_type_indices, min(self.k_examples, len(same_type_indices)))
-        
-        examples = []
-        for ex_idx in example_indices:
-            ex_row = self.df.iloc[ex_idx]
-            ex_q_type_raw = str(ex_row.get("question_type", "open")).lower()
-            ex_question_type = "CLOSED-ENDED" if ex_q_type_raw == "closed" else "OPEN-ENDED"
-            examples.append({
-                "question": ex_row["question"],
-                "question_type": ex_question_type,
-                "answer": str(ex_row["answer"])
-            })
-        
         return {
             "query_image":   self._load_image(row["image_path"]),
             "question":      row["question"],
             "question_type": question_type,
-            "context":       self.retrieved_contexts[idx],
-            "answer":        str(row["answer"]),
-            "examples":      examples
+            "answer":        str(row["answer"])
         }
 
 
-def build_icl_content(query_image: Image.Image, question: str, question_type: str, examples: list, context_list: list = None):
+def build_prompt_content(query_image: Image.Image, question: str, question_type: str):
+    """
+    Construct a Qwen2-VL prompt without RAG:
+      [query_image] + question text + answer prompt
+    """
     content = []
-    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\n"})
     
-    # Add few-shot examples (same question type, text-only)
-    for i, ex in enumerate(examples):
-        content.append({"type": "text", "text": f"Example {i+1}:\nQuestion: {ex['question']}\nQuestion Type: {ex['question_type']}\nAnswer: {ex['answer']}\n\n"})
-    
-    # Add retrieved context if available (from mRAG)
-    if context_list:
-        k = len(context_list)
-        content.append({"type": "text", "text": f"Retrieved Medical Evidence (Top-{k} QA cases ranked by similarity score):\n\n"})
-        for case_text in context_list:
-            content.append({"type": "text", "text": case_text + "\n"})
-    
-    # Add query
-    content.append({"type": "text", "text": "Now answer the following question:\n"})
+    # 1) System and Image
+    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
     content.append({"type": "image", "image": query_image})
-    content.append({"type": "text", "text": f"Question: {question}\nQuestion Type: {question_type}\n\n"})
     
+    # 2) Question and Question Type
+    q_text = (
+        f"\n\nQuestion:\n{question}\n\n"
+        f"Question Type:\n{question_type}\n\n"
+    )
+    content.append({"type": "text", "text": q_text})
+    
+    # 3) Instruction and rules
     instruction = (
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
         "- If the question is CLOSED-ENDED (Yes/No only):\n"
-        "  • The final answer MUST be \"yes\" or \"no\"\n"
-        "  • Focus primarily on the image\n"
-        "  • Use retrieved QA cases only if they strongly match the visual evidence\n\n"
+        "  - The final answer MUST be \"yes\" or \"no\"\n"
+        "  - Focus primarily on the image\n\n"
         "- If the question is OPEN-ENDED:\n"
-        "  • Use both the image and retrieved QA cases\n"
-        "  • Combine visual evidence with similar QA examples to improve reasoning and completeness\n\n"
+        "  - Use the image to answer the question\n"
+        "  - Provide a concise and accurate answer\n\n"
         "General rules:\n"
-        "- Retrieved cases are ranked by similarity score (higher score = more relevant)\n"
-        "- Ignore low-score or irrelevant retrieved cases\n"
         "- Do not output reasoning steps\n"
         "- Output only the final answer\n\n"
         "Answer:\n"
     )
     content.append({"type": "text", "text": instruction})
+    
     return content
 
 
@@ -318,14 +229,13 @@ def get_collate_fn(processor):
         full_prompts  = []
 
         for item in batch:
-            # Collect images: only query image (examples are text-only)
             sample_images = [item["query_image"]]
             all_images_per_sample.append(sample_images)
-
-            icl_content = build_icl_content(
-                item["query_image"], item["question"], item["question_type"], item["examples"], item["context"]
+            
+            prompt_content = build_prompt_content(
+                item["query_image"], item["question"], item["question_type"]
             )
-            user_messages = [{"role": "user",      "content": icl_content}]
+            user_messages = [{"role": "user", "content": prompt_content}]
             full_messages = user_messages + [
                 {"role": "assistant", "content": [{"type": "text", "text": item["answer"]}]}
             ]
@@ -415,8 +325,8 @@ def _load_image_safe(img_path: Path) -> Image.Image:
 # Evaluation loop
 # ──────────────────────────────────────────────────────────────────────────────
 
-def evaluate_model(model, processor, test_df: pd.DataFrame, test_contexts: list,
-                   image_root: Path, rouge_scr, device, k_examples=3, desc: str = "Test"):
+def evaluate_model(model, processor, test_df: pd.DataFrame,
+                   image_root: Path, rouge_scr, device, desc: str = "Test"):
     """
     Evaluate model on the test set.
     Returns metrics dict with the new format:
@@ -435,34 +345,16 @@ def evaluate_model(model, processor, test_df: pd.DataFrame, test_contexts: list,
 
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc=desc):
         question  = row["question"]
-        context   = test_contexts[idx]
         q_type_raw = str(row.get("question_type", "open")).lower()
         q_type    = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
 
         query_image  = _load_image_safe(image_root / row["image_path"])
         
-        # Sample k examples of the SAME question type from test set
-        same_type_indices = [
-            i for i in range(len(test_df)) 
-            if i != idx and str(test_df.iloc[i].get("question_type", "open")).lower() == q_type_raw
-        ]
-        example_indices = random.sample(same_type_indices, min(k_examples, len(same_type_indices)))
+        # Use simple prompt without RAG
+        prompt_content = build_prompt_content(query_image, question, q_type)
+        messages     = [{"role": "user", "content": prompt_content}]
         
-        examples = []
-        for ex_idx in example_indices:
-            ex_row = test_df.iloc[ex_idx]
-            ex_q_type_raw = str(ex_row.get("question_type", "open")).lower()
-            ex_question_type = "CLOSED-ENDED" if ex_q_type_raw == "closed" else "OPEN-ENDED"
-            examples.append({
-                "question": ex_row['question'],
-                "question_type": ex_question_type,
-                "answer": str(ex_row['answer'])
-            })
-        
-        icl_content = build_icl_content(query_image, question, q_type, examples, context)
-        messages     = [{"role": "user", "content": icl_content}]
-        
-        # Collect all images: only query image (examples are text-only)
+        # Collect all images: only query image
         all_images = [query_image]
 
         prompt  = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -472,7 +364,7 @@ def evaluate_model(model, processor, test_df: pd.DataFrame, test_contexts: list,
         with torch.no_grad():
             output_ids = model.generate(
                 **inputs,
-                max_new_tokens=64,
+                max_new_tokens=128,
                 pad_token_id=processor.tokenizer.pad_token_id,
                 eos_token_id=processor.tokenizer.eos_token_id,
                 do_sample=False,
@@ -548,8 +440,8 @@ def evaluate_model(model, processor, test_df: pd.DataFrame, test_contexts: list,
 def train_single_client(args, client_id: int):
     """
     Train one client end-to-end:
-      1) BiomedCLIP embeddings (cached)  2) FAISS retrieval
-      3) Qwen2-VL + LoRA training        4) Save JSON artifacts
+      1) Qwen2-VL + LoRA training
+      2) Save JSON artifacts
 
     Returns the output directory Path so the caller can log it.
     """
@@ -563,7 +455,7 @@ def train_single_client(args, client_id: int):
     client_csv, test_csv, image_root = resolve_data_paths(
         args.dataset, args.setting, args.alpha, args.k, client_id
     )
-    out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id)
+    out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id, args.model_short)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     alpha_str = f"alpha_{args.alpha}" if args.alpha is not None else "N/A"
@@ -593,91 +485,16 @@ def train_single_client(args, client_id: int):
     t_start  = time.time()
     dt_start = datetime.datetime.now().isoformat()
 
-    # ── Step 1: BiomedCLIP embeddings ────────────────────────────────────────
-    emb_cache_train = out_dir / "train_biomed_embeddings.npy"
-    emb_cache_test  = out_dir / "test_biomed_embeddings.npy"
-
-    if emb_cache_train.exists() and emb_cache_test.exists():
-        log("Loading cached BiomedCLIP embeddings...")
-        train_features = np.load(emb_cache_train)
-        test_features  = np.load(emb_cache_test)
-    else:
-        log("Loading BiomedCLIP model...")
-        biomed_model, biomed_preprocess = open_clip.create_model_from_pretrained(BIOMED_MODEL)
-        biomed_tokenizer = open_clip.get_tokenizer(BIOMED_MODEL)
-        biomed_model.to(device).eval()
-
-        log("Computing train embeddings (client data)...")
-        train_features = precompute_embeddings(
-            client_csv, image_root, biomed_model, biomed_preprocess, biomed_tokenizer, device
-        )
-        np.save(emb_cache_train, train_features)
-
-        log("Computing test embeddings (centralized test)...")
-        test_features = precompute_embeddings(
-            test_csv, image_root, biomed_model, biomed_preprocess, biomed_tokenizer, device
-        )
-        np.save(emb_cache_test, test_features)
-
-        del biomed_model, biomed_preprocess, biomed_tokenizer
-        torch.cuda.empty_cache()
-        gc.collect()
-        log("BiomedCLIP freed from memory.")
-
-    # ── Step 2: FAISS index & RAG retrieval ──────────────────────────────────
-    log("Building FAISS index on client train features...")
-    train_features = l2_normalize(train_features)
-    test_features  = l2_normalize(test_features)
-
-    faiss_dim = train_features.shape[1]
-    index     = faiss.IndexFlatIP(faiss_dim)
-    index.add(train_features.astype(np.float32))
-
-    log(f"Performing mRAG retrieval (rag_k={args.rag_k})...")
-
-    # Train retrieval (exclude self)
-    D_tr, I_tr = index.search(train_features.astype(np.float32), args.rag_k + 1)
-    train_contexts  = []
-    train_img_paths = []
-    for i in range(len(train_df)):
-        ret_idx, ret_sc = [], []
-        for pos, mi in enumerate(I_tr[i]):
-            if mi == i:
-                continue
-            ret_idx.append(mi)
-            ret_sc.append(float(D_tr[i][pos]))
-            if len(ret_idx) == args.rag_k:
-                break
-        if len(ret_idx) < args.rag_k:
-            for pos, mi in enumerate(I_tr[i]):
-                if mi not in ret_idx:
-                    ret_idx.append(mi)
-                    ret_sc.append(float(D_tr[i][pos]))
-                if len(ret_idx) == args.rag_k:
-                    break
-        train_contexts.append(format_retrieved_knowledge(train_df, ret_idx, ret_sc))
-        train_img_paths.append(get_retrieved_image_paths(train_df, ret_idx))
-
-    # Test retrieval
-    D_te, I_te = index.search(test_features.astype(np.float32), args.rag_k)
-    test_contexts  = []
-    test_img_paths = []
-    for i in range(len(test_df)):
-        test_contexts.append(format_retrieved_knowledge(train_df, I_te[i], D_te[i]))
-        test_img_paths.append(get_retrieved_image_paths(train_df, I_te[i]))
-
-    log("RAG retrieval done.")
-
-    # ── Step 3: Load Qwen2-VL + LoRA ─────────────────────────────────────────
+    # ── Step 1: Load Qwen2-VL + LoRA ─────────────────────────────────────────
     torch_dtype = (
         torch.bfloat16
         if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
         else torch.float16
     )
 
-    log(f"Loading processor & VLM: {MODEL_NAME}...")
+    log(f"Loading processor & VLM: {args.model_name}...")
     processor = AutoProcessor.from_pretrained(
-        MODEL_NAME,
+        args.model_name,
         min_pixels=128 * 28 * 28,
         max_pixels=256 * 28 * 28,
     )
@@ -685,13 +502,13 @@ def train_single_client(args, client_id: int):
     if processor.tokenizer.pad_token is None:
         processor.tokenizer.pad_token = processor.tokenizer.eos_token
 
-    if "qwen2.5" in MODEL_NAME.lower():
+    if "qwen2.5" in args.model_name.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
     base_model = ModelClass.from_pretrained(
-        MODEL_NAME,
+        args.model_name,
         torch_dtype=torch_dtype,
         device_map="auto",
     )
@@ -715,10 +532,9 @@ def train_single_client(args, client_id: int):
     model = get_peft_model(base_model, lora_config)
     model.print_trainable_parameters()
 
-    # ── Step 4: Dataset & DataLoader ─────────────────────────────────────────
+    # ── Step 2: Dataset & DataLoader ─────────────────────────────────────────
     train_dataset = MedVQADataset(
-        train_df, train_contexts, train_img_paths,
-        image_root=image_root, k_examples=args.k_examples, max_length=args.max_length,
+        train_df, image_root=image_root,
     )
     train_loader = DataLoader(
         train_dataset,
@@ -784,8 +600,8 @@ def train_single_client(args, client_id: int):
 
         # ── Evaluate ─────────────────────────────────────────────────────────
         metrics, predictions = evaluate_model(
-            model, processor, test_df, test_contexts,
-            image_root, rouge_scr, device, k_examples=args.k_examples,
+            model, processor, test_df,
+            image_root, rouge_scr, device,
             desc=f"[Client {client_id}] Eval Epoch {epoch}",
         )
         c = metrics["closed-ended"]
@@ -801,7 +617,7 @@ def train_single_client(args, client_id: int):
             best_closed_acc = metrics["closed-ended"]["Accuracy"]
             best_epoch      = epoch
             best_metrics    = metrics
-            log(f"New best Closed Acc={best_closed_acc:.4f}  → saving adapter to {out_dir}")
+            log(f"New best Closed Acc={best_closed_acc:.4f}  -> saving adapter to {out_dir}")
             model.save_pretrained(out_dir)
 
             pred_df = test_df.copy()
@@ -858,13 +674,11 @@ def train_single_client(args, client_id: int):
         "alpha":             args.alpha,
         "k":                 args.k,
         "client_id":         client_id,
-        "model":             MODEL_SHORT,
+        "model":             args.model_short,
         "epochs":            args.epochs,
         "lr":                args.lr,
         "batch_size":        args.batch_size,
         "grad_accum":        args.grad_accum,
-        "rag_k":             args.rag_k,
-        "k_examples":        args.k_examples,
         "seed":              args.seed,
         "num_train_samples": len(train_df),
         "num_test_samples":  len(test_df),
@@ -916,7 +730,7 @@ def train_single_client(args, client_id: int):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Local client training for Federated mRAG Med-VQA. "
+        description="Local client training for Federated Med-VQA without RAG. "
                     "Automatically trains ALL clients (1 … k) sequentially."
     )
 
@@ -929,14 +743,10 @@ def main():
                         help="Dirichlet alpha for noniid (e.g. 0.5, 0.1)")
     parser.add_argument("--k",       type=int,   default=3,
                         help="Total number of clients")
-
-    # ── RAG retrieval ────────────────────────────────────────────────────────
-    parser.add_argument("--rag_k",     type=int, default=3,
-                        help="Number of retrieved cases for mRAG context")
-    
-    # ── ICL ───────────────────────────────────────────────────────────────────
-    parser.add_argument("--k_examples", type=int, default=3,
-                        help="Number of few-shot examples for ICL (same question type)")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+                        help="VLM model name from HuggingFace")
+    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+                        help="Short model name for directory naming")
 
     # ── Training hyperparams ─────────────────────────────────────────────────
     parser.add_argument("--epochs",     type=int,   default=1)
@@ -956,6 +766,7 @@ def main():
     log(f"Starting sequential training for ALL {args.k} clients.")
     log(f"Dataset={args.dataset}  setting={args.setting}  "
         f"alpha={args.alpha}  k={args.k}  epochs={args.epochs}")
+    log(f"Mode: mRAG without KD (1 epoch initial training)")
     log("")
 
     total_start = time.time()
@@ -969,7 +780,7 @@ def main():
     log(f"{'='*60}")
     log(f"ALL {args.k} CLIENTS COMPLETED in {total_min:.1f} min")
     for cid, out in results:
-        log(f"  client_{cid} → {out}")
+        log(f"  client_{cid} -> {out}")
     log(f"{'='*60}")
 
 
