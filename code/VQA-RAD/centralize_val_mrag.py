@@ -138,25 +138,18 @@ def format_retrieved_knowledge(df, indices, scores=None):
     return docs
 
 # ── Metrics ──────────────────────────────────────────────────────────────────
-def _normalize(text: str) -> str:
-    if not text or (isinstance(text, float) and np.isnan(text)): return ""
-    text = str(text).lower().strip()
-    text = _re.sub(r"[^\w\s]", "", text)
-    text = _re.sub(r"\s+", " ", text).strip()
-    return text
+def compute_exact_match(prediction, ground_truth):
+    return 1.0 if prediction.strip().lower() == ground_truth.strip().lower() else 0.0
 
-def compute_exact_match(pred: str, gt: str) -> float:
-    return 1.0 if _normalize(pred) == _normalize(gt) else 0.0
+def compute_bleu(prediction, ground_truth):
+    ref = [ground_truth.strip().lower().split()]
+    hyp = prediction.strip().lower().split()
+    smooth = SmoothingFunction().method1
+    return sentence_bleu(ref, hyp, smoothing_function=smooth)
 
-def compute_bleu(pred: str, gt: str) -> float:
-    ref = [_normalize(gt).split()]
-    hyp = _normalize(pred).split()
-    if not hyp: return 0.0
-    return sentence_bleu(ref, hyp, smoothing_function=SmoothingFunction().method1)
-
-def compute_rouge_l(pred: str, gt: str, scorer) -> float:
-    scores = scorer.score(_normalize(gt), _normalize(pred))
-    return scores["rougeL"].fmeasure
+def compute_rouge_l(prediction, ground_truth, scorer):
+    scores = scorer.score(ground_truth.strip().lower(), prediction.strip().lower())
+    return scores['rougeL'].fmeasure
 
 def compute_bert_score(preds: list, gts: list) -> float:
     if not preds: return 0.0
@@ -384,10 +377,6 @@ def main():
     # Closed metrics
     log("Computing closed-ended metrics...")
     c_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(closed_preds, closed_gts)])) if closed_preds else 0.0
-    c_em = c_acc # Exact match is same as accuracy for closed
-    c_bleu = float(np.mean([compute_bleu(p, g) for p, g in zip(closed_preds, closed_gts)])) if closed_preds else 0.0
-    c_rouge = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(closed_preds, closed_gts)])) if closed_preds else 0.0
-    c_bert = compute_bert_score(closed_preds, closed_gts) if closed_preds else 0.0
 
     # Open metrics
     log("Computing open-ended metrics...")

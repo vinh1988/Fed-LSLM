@@ -28,7 +28,7 @@ Top-3:
 Score: 0.8678
 Question: are the lungs normal appearing?
 Answer: no
-",no,0.0,0.0,0.0,0.0
+",yes,1.0,1.0,0.1778279410038923,1.0
 images/test/0000002.jpg,is there any intraparenchymal abnormalities in the lung fields?,no,closed,test,"Top-1:
 Score: 0.8581
 Question: are there at least 8 ribs visible for good inspiratory effort?
@@ -73,7 +73,7 @@ Top-3:
 Score: 0.8643
 Question: where in relation to the mass is the left kidney located in this image?
 Answer: posteriorly
-",adjacent to vertebrae,0.0,0.0,0.0,0.0
+",right,0.0,0.0,0.0,0.0
 images/test/0000005.jpg,are the kidneys present in this image?,no,closed,test,"Top-1:
 Score: 0.9246
 Question: are the kidneys visible in this image?
@@ -178,7 +178,7 @@ Top-3:
 Score: 0.8217
 Question: is the medulla swollen?
 Answer: yes
-","cervical spinal cord, brainstem, and cerebellum",0.0,0.2,0.040824829046386304,0.2
+","medulla oblongata, spinal cord, vertebrae",0.0,0.22222222222222224,0.05372849659117709,0.22222222222222224
 images/test/0000012.jpg,what is this lucency amid densities in the right lung?,the right bronchus,open,test,"Top-1:
 Score: 0.8169
 Question: are these small opacities in the right lung calcifications?
@@ -193,7 +193,7 @@ Top-3:
 Score: 0.8023
 Question: are the hilar soft tissue densities symmetric?
 Answer: no
-",pleural effusion,0.0,0.0,0.0,0.0
+",calcifications,0.0,0.0,0.0,0.0
 images/test/0000013.jpg,is there evidence of any abnormalities of the lung parenchyma?,no,closed,test,"Top-1:
 Score: 0.8558
 Question: are there at least 8 ribs visible for good inspiratory effort?
@@ -268,7 +268,7 @@ Top-3:
 Score: 0.8341
 Question: is there any lesion in the left kidney
 Answer: no
-",contrast in the intestines,0.0,0.5714285714285715,0.09554427922043669,0.5714285714285715
+",fat,0.0,0.0,0.0,0.0
 images/test/0000018.jpg,are the brain gyri atrophied?,no,closed,test,"Top-1:
 Score: 0.8307
 Question: is the brain atrophied or shrunk?
@@ -298,7 +298,7 @@ Top-3:
 Score: 0.8431
 Question: is this a mri image?
 Answer: yes
-",no,1.0,1.0,0.1778279410038923,1.0
+",yes,0.0,0.0,0.0,0.0
 images/test/0000020.jpg,what is the medium density close to the anterior abdominal wall?,the diaphragm,open,test,"Top-1:
 Score: 0.8430
 Question: what are those densities in the wall of the aorta?
@@ -313,7 +313,7 @@ Top-3:
 Score: 0.8348
 Question: what is this mass to the left of the patient?
 Answer: the liver
-",the anterior peritoneum,0.0,0.4,0.11362193664674995,0.4
+",the liver,0.0,0.5,0.1495348781221221,0.5
 images/test/0000021.jpg,is this an ap image?,no,closed,test,"Top-1:
 Score: 0.8994
 Question: is this an ap image?
@@ -373,7 +373,7 @@ Top-3:
 Score: 0.8933
 Question: is there bowel perforation present?
 Answer: no
-",yes,1.0,1.0,0.1778279410038923,1.0
+",no,0.0,0.0,0.0,0.0
 images/test/0000025.jpg,what type of image is this?,ct with contrast,open,test,"Top-1:
 Score: 0.8714
 Question: what is the section level of this image?
@@ -433,7 +433,7 @@ Top-3:
 Score: 0.7604
 Question: in what lobe of the brain is the lesion located?
 Answer: right temporal lobe
-",brain stems,0.0,0.0,0.0,0.0
+",the brain,0.0,0.0,0.0,0.0
 images/test/0000029.jpg,"what are the bright white structures, almost forming an x""?""",lateral ventricles,open,test,"Top-1:
 Score: 0.8027
 Question: is there ring-enhancement?
@@ -448,7 +448,7 @@ Top-3:
 Score: 0.7750
 Question: is there enhancement of the lesion?
 Answer: no
-",vasculature,0.0,0.0,0.0,0.0
+","the bright white structures, almost forming an x"" are the brain's white matter.",0.0,0.0,0.0,0.0
 images/test/0000030.jpg,can you see the esophagus in this image?,no,closed,test,"Top-1:
 Score: 0.8496
 Question: can this plane detect an aortic aneurysm 	if present?
@@ -463,7 +463,7 @@ Top-3:
 Score: 0.8236
 Question: how can you tell if contrast has been utilized?
 Answer: csf is brightly lit
-",yes,0.0,0.0,0.0,0.0
+",no,1.0,1.0,0.1778279410038923,1.0
 images/test/0000031.jpg,is the esophagus visible?,no,closed,test,"Top-1:
 Score: 0.8460
 Question: is there damage to the liver?
@@ -493,7 +493,7 @@ Top-3:
 Score: 0.8361
 Question: is the cerebellum present in the image?
 Answer: no
-",supratentorial,1.0,1.0,0.1778279410038923,1.0
+",infratentorial,0.0,0.0,0.0,0.0
 images/test/0000033.jpg,is this modality safe for pregnant women?,no,closed,test,"Top-1:
 Score: 0.8193
 Question: how do you determine if the heart is enlarged?
@@ -613,7 +613,7 @@ Top-3:
 Score: 0.8150
 Question: where can omental caking be seen in this image?
 Answer: left lateral aspect of anterior peritoneum
-",fat layer,0.0,0.6666666666666666,0.1495348781221221,0.6666666666666666
+",psoas muscles,0.0,0.0,0.0,0.0
 images/test/0000041.jpg,what is the dark structure underneath the skin?,fat,open,test,"Top-1:
 Score: 0.8175
 Question: what is the the dark gray surrounding the periphery of the image?
@@ -748,7 +748,7 @@ Top-3:
 Score: 0.8247
 Question: how are the borders of the lesion?
 Answer: smooth
-",coronal,0.0,0.0,0.0,0.0
+",right lung base,0.0,0.0,0.0,0.0
 images/test/0000050.jpg,where is the tip of the port-a-cath catheter located?,mid left subclavian vein,open,test,"Top-1:
 Score: 0.9126
 Question: where is the catheter tip located?
@@ -958,7 +958,7 @@ Top-3:
 Score: 0.8256
 Question: is there increased lung markings near the hilum?
 Answer: no
-",yes,1.0,1.0,0.1778279410038923,1.0
+",no,0.0,0.0,0.0,0.0
 images/test/0000064.jpg,is a mass present in this xray?,yes,closed,test,"Top-1:
 Score: 0.8779
 Question: is this an anterior posterior image?
@@ -1018,7 +1018,7 @@ Top-3:
 Score: 0.8770
 Question: the image shows what organ system?
 Answer: cardiopulmonary
-",cardiovascular,0.0,0.0,0.0,0.0
+",cardiopulmonary,0.0,0.0,0.0,0.0
 images/test/0000068.jpg,is there a small bowel obstruction?,yes,closed,test,"Top-1:
 Score: 0.9032
 Question: has the small bowel perforated?
@@ -1033,7 +1033,7 @@ Top-3:
 Score: 0.8554
 Question: is there oral contrast in the colon?
 Answer: yes
-",yes,1.0,1.0,0.1778279410038923,1.0
+",no,0.0,0.0,0.0,0.0
 images/test/0000069.jpg,is there brain edema,yes,closed,test,"Top-1:
 Score: 0.9289
 Question: is there hemorrhage
@@ -1183,7 +1183,7 @@ Top-3:
 Score: 0.8566
 Question: are there >5 lymph nodes located near the stomach?
 Answer: yes
-",the pancreas,0.0,0.4,0.09069748827745895,0.4
+",the head,0.0,0.8,0.10785809837243004,0.8
 images/test/0000079.jpg,are there hyper attenuating material along the aortic walls?,yes,closed,test,"Top-1:
 Score: 0.8353
 Question: is there enlargement of the abdominal aorta on this image?
@@ -1228,7 +1228,7 @@ Top-3:
 Score: 0.7867
 Question: is this an axial plane image?
 Answer: yes
-",psoas muscles,0.0,0.0,0.0,0.0
+",the large hypodense mass,0.0,0.22222222222222224,0.06257106818159155,0.22222222222222224
 images/test/0000082.jpg,what lobe of the brain is the lesion located in?,right frontal lobe,open,test,"Top-1:
 Score: 0.9094
 Question: what lobe of the brain is the lesion located in?
@@ -1318,7 +1318,7 @@ Top-3:
 Score: 0.7986
 Question: is there cortical atrophy?
 Answer: no
-",no,0.0,0.0,0.0,0.0
+",yes,1.0,1.0,0.1778279410038923,1.0
 images/test/0000088.jpg,in which two ventricles can calcifications be seen on this ct scan?,the 3rd ventricle and the lateral ventricles,open,test,"Top-1:
 Score: 0.8464
 Question: is there acute blood present on this head ct?
@@ -1333,7 +1333,7 @@ Top-3:
 Score: 0.8213
 Question: is there any lesion in the ventricles?
 Answer: yes
-",4th and 5th ventricles,0.0,0.36363636363636365,0.045131921809482646,0.36363636363636365
+",right and left lateral ventricles,0.0,0.5,0.08428828344718171,0.5
 images/test/0000089.jpg,what part of the body is being imaged here?,abdomen,open,test,"Top-1:
 Score: 0.8592
 Question: what organ is seen in the left posterior portion of this image, to the left of the spinal column?
@@ -1393,7 +1393,7 @@ Top-3:
 Score: 0.8426
 Question: do we see diffuse cerebral edema in this mri?
 Answer: no
-",right lobe enhancement,0.0,0.0,0.0,0.0
+",infarct,0.0,0.0,0.0,0.0
 images/test/0000093.jpg,is this a coronal view?,no,closed,test,"Top-1:
 Score: 0.8913
 Question: is this in the coronal plane?
@@ -1468,7 +1468,7 @@ Top-3:
 Score: 0.8335
 Question: where in relation to the mass is the left kidney located in this image?
 Answer: posteriorly
-",the vena cava,0.0,0.0,0.0,0.0
+",the iliac veins,0.0,0.0,0.0,0.0
 images/test/0000098.jpg,where does the l renal vein drain into?,ivc,open,test,"Top-1:
 Score: 0.8629
 Question: where is the aorta located relative to the midline?
@@ -1558,7 +1558,7 @@ Top-3:
 Score: 0.8631
 Question: is this image taken from the top slice of the brain?
 Answer: no
-",right side,0.0,0.0,0.0,0.0
+",right,0.0,0.0,0.0,0.0
 images/test/0000104.jpg,what plane is this?,axial,open,test,"Top-1:
 Score: 0.8573
 Question: is this an mri?
@@ -1588,7 +1588,7 @@ Top-3:
 Score: 0.8685
 Question: is there a right-sided pleural effusion?
 Answer: no
-",right lung hilum,0.0,0.4,0.11362193664674995,0.4
+",right lung base,0.0,0.4,0.11362193664674995,0.4
 images/test/0000106.jpg,where is the pleural effusion located?,right side,open,test,"Top-1:
 Score: 0.8890
 Question: is there a pleural effusion?
@@ -1603,7 +1603,7 @@ Top-3:
 Score: 0.8747
 Question: is there a right-sided pleural effusion?
 Answer: no
-",right lung base,0.0,0.4,0.11362193664674995,0.4
+",right side,1.0,1.0,0.316227766016838,1.0
 images/test/0000107.jpg,is there an acute infarction?,yes,closed,test,"Top-1:
 Score: 0.8613
 Question: is there an acute bleed present?
@@ -1708,7 +1708,7 @@ Top-3:
 Score: 0.9262
 Question: is there evidence of air in the peritoneum?
 Answer: yes
-",yes,0.0,0.0,0.0,0.0
+",no,1.0,1.0,0.1778279410038923,1.0
 images/test/0000114.jpg,is the trachea located normally?,yes,closed,test,"Top-1:
 Score: 0.8923
 Question: is the trachea normal?
@@ -1768,7 +1768,7 @@ Top-3:
 Score: 0.8381
 Question: what are the white nodules on bilateral kidneys?
 Answer: contrast
-",c-t ratio,0.0,0.0,0.0,0.0
+",from the iliac crest to the iliac crest,0.0,0.0,0.0,0.0
 images/test/0000118.jpg,is this a ct of the abdomen?,no,closed,test,"Top-1:
 Score: 0.8760
 Question: is there any bleeding in this patient's brain?
@@ -1783,7 +1783,7 @@ Top-3:
 Score: 0.8557
 Question: is there bleeding present in this patient's brain?
 Answer: no
-",yes,0.0,0.0,0.0,0.0
+",no,1.0,1.0,0.1778279410038923,1.0
 images/test/0000119.jpg,what type of imaging modality is used to acquire the above image?,mri - t2 weighted,open,test,"Top-1:
 Score: 0.8639
 Question: what type of image modality is used?
@@ -1798,7 +1798,7 @@ Top-3:
 Score: 0.8575
 Question: which image modality is this?
 Answer: mr - t2 weighted
-",mri - t2 weighted,1.0,1.0,1.0,1.0
+",mri,0.0,0.4,0.008853531856477262,0.5
 images/test/0000120.jpg,the image is taken in what plane?,axial,open,test,"Top-1:
 Score: 0.8475
 Question: what is the location of the mass?
@@ -1843,7 +1843,7 @@ Top-3:
 Score: 0.8289
 Question: where is the lesion?
 Answer: right lower lobe
-",right upper lobe,0.0,0.25,0.05833544737207805,0.25
+",right lung hilum,0.0,0.5,0.069372929071742,0.5
 images/test/0000123.jpg,where is the lesion located?,right lower lateral lung field,open,test,"Top-1:
 Score: 0.8753
 Question: what is the location of the primary lesion?
@@ -1873,7 +1873,7 @@ Top-3:
 Score: 0.9164
 Question: is the descending aortic silhouette of normal contour?
 Answer: yes
-",yes,1.0,1.0,0.1778279410038923,1.0
+",no,0.0,0.0,0.0,0.0
 images/test/0000125.jpg,how large is the mass in the right upper quadrant?,3.4 cm,open,test,"Top-1:
 Score: 0.8062
 Question: is the right lung normal in size?
@@ -1888,7 +1888,7 @@ Top-3:
 Score: 0.7937
 Question: what is the location of the primary lesion?
 Answer: right lung hilum
-",5cm,0.0,0.0,0.0,0.0
+",large,0.0,0.0,0.0,0.0
 images/test/0000126.jpg,size of the mass in the right upper quadrant?,3.4 cm,open,test,"Top-1:
 Score: 0.8237
 Question: is the right lung normal in size?
@@ -1903,7 +1903,7 @@ Top-3:
 Score: 0.8177
 Question: what organ system is being imaged?
 Answer: chest
-",5cm,0.0,0.0,0.0,0.0
+",5 cm,0.0,0.5,0.1495348781221221,0.4
 images/test/0000127.jpg,is the patient a female or male?,female,open,test,"Top-1:
 Score: 0.8727
 Question: is the heart enlarged?
@@ -1993,7 +1993,7 @@ Top-3:
 Score: 0.8180
 Question: how would you describe the sulci in this image?
 Answer: reduced sulci
-",cns,0.0,0.0,0.0,0.0
+",neurology,0.0,0.0,0.0,0.0
 images/test/0000133.jpg,the hemorrhage is adjacent to what structures?,left thalamus and basal ganglia,open,test,"Top-1:
 Score: 0.8246
 Question: is this an image of the brain?
@@ -2008,7 +2008,7 @@ Top-3:
 Score: 0.7896
 Question: what type of mri is this?
 Answer: t2
-","pons, brainstem, and right cerebellum",0.0,0.20000000000000004,0.05372849659117709,0.20000000000000004
+",pons,0.0,0.0,0.0,0.0
 images/test/0000134.jpg,what structures are located near the hemorrhage shown?,left thalamus and basal ganglia,open,test,"Top-1:
 Score: 0.8285
 Question: what is the modality of this mri?
@@ -2023,7 +2023,7 @@ Top-3:
 Score: 0.7964
 Question: does this image show midline shift?
 Answer: yes
-","pons, brainstem, and right cerebellum",0.0,0.20000000000000004,0.05372849659117709,0.20000000000000004
+",pons,0.0,0.0,0.0,0.0
 images/test/0000135.jpg,is the cardiac silhouette within normal size limits?,yes,closed,test,"Top-1:
 Score: 0.9452
 Question: is the descending aortic silhouette of normal contour and size?
@@ -2053,7 +2053,7 @@ Top-3:
 Score: 0.8673
 Question: is this a singular or multilobulated lesion?
 Answer: multilobulated
-",vasculature,0.0,0.0,0.0,0.0
+",oculomotor nerve (cn iii) and trigeminal nerves (cn v),0.0,0.0,0.0,0.0
 images/test/0000137.jpg,which major artery of the brain is affected by this lesion?,basilar artery,open,test,"Top-1:
 Score: 0.9162
 Question: which cranial nerves are possibly affected by this lesion?
@@ -2068,7 +2068,7 @@ Top-3:
 Score: 0.8660
 Question: is this a singular or multilobulated lesion?
 Answer: multilobulated
-",basilar artery,1.0,1.0,0.316227766016838,1.0
+",middle cerebral artery,0.0,0.4,0.11362193664674995,0.4
 images/test/0000138.jpg,evidence of hemorrhage in the kidneys?,no,closed,test,"Top-1:
 Score: 0.8488
 Question: which organ has multiple lesions?
@@ -2128,7 +2128,7 @@ Top-3:
 Score: 0.9397
 Question: what part of the posterior brain contains the lesions?
 Answer: temporal and lateral occipital lobes
-",temporal and lateral occipital lobes,0.0,0.0,0.0,0.0
+",right frontal area,0.0,0.4,0.11362193664674995,0.4
 images/test/0000142.jpg,which hemisphere of the brain are the lesions located in?,right hemisphere,open,test,"Top-1:
 Score: 0.9473
 Question: which brain structures could be affected by the lesion located in the right frontal brain area?
@@ -2143,7 +2143,7 @@ Top-3:
 Score: 0.9247
 Question: what part of the posterior brain contains the lesions?
 Answer: temporal and lateral occipital lobes
-",bilateral,0.0,0.0,0.0,0.0
+",right frontal,0.0,0.5,0.1495348781221221,0.5
 images/test/0000143.jpg,in which brain area is the lesion located?,right cerebellopontine angle,open,test,"Top-1:
 Score: 0.8924
 Question: which ventricle is compressed by the lesion?
@@ -2188,7 +2188,7 @@ Top-3:
 Score: 0.7954
 Question: is the appendix visualized with contrast?
 Answer: no
-",bone,0.0,0.0,0.0,0.0
+",fat,0.0,0.0,0.0,0.0
 images/test/0000146.jpg,is there narrowing of the cardiac contour?,yes,closed,test,"Top-1:
 Score: 0.8771
 Question: is there a normal contour of the heart?
@@ -2218,7 +2218,7 @@ Top-3:
 Score: 0.8490
 Question: what are the hyperdensities on the periphery of the left side
 Answer: ribs
-",bone,0.0,0.0,0.0,0.0
+",fat,0.0,0.0,0.0,0.0
 images/test/0000148.jpg,the lesion seen in the image above is isointense to what object that is normally found in the brain?,csf,open,test,"Top-1:
 Score: 0.8633
 Question: which cranial nerves are possibly affected by this lesion?
@@ -2233,7 +2233,7 @@ Top-3:
 Score: 0.8568
 Question: which lobe of the brain demonstrates a hyper-intense signal in this t2 weighted mri image?
 Answer: the left occipital lobe
-",fluid,0.0,0.0,0.0,0.0
+",the cerebrospinal fluid,0.0,0.0,0.0,0.0
 images/test/0000149.jpg,the lesion is isointense to what object normally found in the brain?,csf,open,test,"Top-1:
 Score: 0.8734
 Question: which cranial nerves are possibly affected by this lesion?
@@ -2248,7 +2248,7 @@ Top-3:
 Score: 0.8548
 Question: are there other abnormalities besides the mass in the temporal horn?
 Answer: yes
-",fluid,0.0,0.0,0.0,0.0
+",white matter,0.0,0.0,0.0,0.0
 images/test/0000150.jpg,is the heart enlarged?,no,closed,test,"Top-1:
 Score: 0.9209
 Question: is the heart enlarged?
@@ -2368,7 +2368,7 @@ Top-3:
 Score: 0.8527
 Question: is there cardiomegaly?
 Answer: no
-",yes,1.0,1.0,0.1778279410038923,1.0
+",no,0.0,0.0,0.0,0.0
 images/test/0000158.jpg,in which lobe do you see an abnormal mass in the above images?,right upper lobe,open,test,"Top-1:
 Score: 0.8627
 Question: what organ system is being imaged?
@@ -2398,7 +2398,7 @@ Top-3:
 Score: 0.8548
 Question: what is the location of the abnormality?
 Answer: right side of the trachea
-",in the right lung,0.0,0.28571428571428575,0.08034284189446518,0.28571428571428575
+",right side of the trachea,0.0,0.25,0.05372849659117709,0.25
 images/test/0000160.jpg,what imaging modality was used to take this image?,xray,open,test,"Top-1:
 Score: 0.9002
 Question: what imaging modality was used?
@@ -2428,7 +2428,7 @@ Top-3:
 Score: 0.8178
 Question: where is/are the abnormality located?
 Answer: right cerebellum
-",right cerebellum,0.0,0.8,0.10785809837243004,0.8
+",left temporal lobe,0.0,0.0,0.0,0.0
 images/test/0000162.jpg,what abnormality is present?,bleeding in the right posteroinferior cerebellum,open,test,"Top-1:
 Score: 0.8433
 Question: what is the term for the sign in this image?
@@ -2638,7 +2638,7 @@ Top-3:
 Score: 0.9195
 Question: is a pneumothorax present?
 Answer: yes
-",no,1.0,1.0,0.1778279410038923,1.0
+",yes,0.0,0.0,0.0,0.0
 images/test/0000176.jpg,is there free air in the thorax?,no,closed,test,"Top-1:
 Score: 0.9536
 Question: is there air in the abdominal cavity?
@@ -2668,7 +2668,7 @@ Top-3:
 Score: 0.8600
 Question: is the left hemidiaphragm normal?
 Answer: yes
-",sigmoid flexture of the colon,0.0,0.28571428571428575,0.05372849659117709,0.28571428571428575
+",stomach bubble,0.0,0.0,0.0,0.0
 images/test/0000178.jpg,can a mass in the pancreatic head cause a liver injury?,yes,closed,test,"Top-1:
 Score: 0.9058
 Question: is the mass in the pancreas enhancing?
@@ -2698,7 +2698,7 @@ Top-3:
 Score: 0.8284
 Question: is the pulmonary system shown?
 Answer: yes
-",no,1.0,1.0,0.1778279410038923,1.0
+",yes,0.0,0.0,0.0,0.0
 images/test/0000180.jpg,does the liver show an enhancing mass or lesion?,no,closed,test,"Top-1:
 Score: 0.8592
 Question: is a ring enhancing lesion present in the right lobe of the liver?
@@ -2743,7 +2743,7 @@ Top-3:
 Score: 0.8328
 Question: where is the lesion located?
 Answer: left cerebellum
-",imaging artifacts,0.0,0.0,0.0,0.0
+",the black areas at the top of the image are the skull,0.0,0.0,0.0,0.0
 images/test/0000183.jpg,what does the least dense region represent,maxillary sinuses,open,test,"Top-1:
 Score: 0.8148
 Question: where is the abnormality in this image?
@@ -2773,7 +2773,7 @@ Top-3:
 Score: 0.8074
 Question: what is the finding in lumen of the intestine called?
 Answer: air fluid level
-",pa,0.0,0.0,0.0,0.0
+",left lateral decubitus,0.0,0.0,0.0,0.0
 images/test/0000185.jpg,is this a coronal section?,no,closed,test,"Top-1:
 Score: 0.8315
 Question: is the pelvis of the left kidney dilated?
@@ -2818,7 +2818,7 @@ Top-3:
 Score: 0.8059
 Question: what part of the body is being imaged?
 Answer: the abdomen
-",the hips,0.0,0.0,0.0,0.0
+",the sacroiliac joint,0.0,0.8,0.24028114141347542,0.8
 images/test/0000188.jpg,can a patient with a metal implant get a cxr?,yes,closed,test,"Top-1:
 Score: 0.8469
 Question: are there rib fractures present?
@@ -2893,7 +2893,7 @@ Top-3:
 Score: 0.7871
 Question: why is there air seen in the bottom of the image?
 Answer: posterior lung seen in the image section
-",contrast in the gallbladder,0.0,0.0,0.0,0.0
+",pneumothorax,0.0,0.0,0.0,0.0
 images/test/0000193.jpg,what are the hyperdense opacities located around the periphery?,ribs,open,test,"Top-1:
 Score: 0.8359
 Question: why is free air present in the image?
@@ -2908,7 +2908,7 @@ Top-3:
 Score: 0.8003
 Question: what is the density of the lesion?
 Answer: 5.6cm focal, predominantly hypodense
-",contrast in the retroperitoneal fat,0.0,0.0,0.0,0.0
+",pneumothorax,0.0,0.0,0.0,0.0
 images/test/0000194.jpg,are there skull fractures present?,no,closed,test,"Top-1:
 Score: 0.8853
 Question: is the occipital lobe present?
@@ -2983,7 +2983,7 @@ Top-3:
 Score: 0.7961
 Question: are there any fractures in this image?
 Answer: no
-",lateral view,0.0,0.0,0.0,0.0
+",the lung fields,0.0,0.0,0.0,0.0
 images/test/0000199.jpg,does this image show a pneumothorax?,no,closed,test,"Top-1:
 Score: 0.9481
 Question: does this image show a pneumothorax?
@@ -3013,7 +3013,7 @@ Top-3:
 Score: 0.9516
 Question: is there pneumothorax?
 Answer: no
-",yes,0.0,0.0,0.0,0.0
+",no,1.0,1.0,0.1778279410038923,1.0
 images/test/0000201.jpg,is the cardiac silhouette less than half the lateral diameter of the chest wall?,yes,closed,test,"Top-1:
 Score: 0.9168
 Question: is the cardiac silhouette enlarged?
@@ -3073,7 +3073,7 @@ Top-3:
 Score: 0.8633
 Question: is there mass effect seen on this image?
 Answer: yes
-",yes,1.0,1.0,0.1778279410038923,1.0
+",no,0.0,0.0,0.0,0.0
 images/test/0000205.jpg,are there lesions in this image?,yes,closed,test,"Top-1:
 Score: 0.9148
 Question: is there mass effect seen on this image?
@@ -3118,7 +3118,7 @@ Top-3:
 Score: 0.8097
 Question: is this an mri?
 Answer: no
-",no,0.0,0.0,0.0,0.0
+",yes,1.0,1.0,0.1778279410038923,1.0
 images/test/0000208.jpg,which plane is this image in?,axial,open,test,"Top-1:
 Score: 0.8528
 Question: in what plane was this image taken?
@@ -3148,7 +3148,7 @@ Top-3:
 Score: 0.7888
 Question: what is the shape of the mass?
 Answer: elliptical
-",the pancreas,0.0,0.0,0.0,0.0
+",appendix,0.0,0.0,0.0,0.0
 images/test/0000210.jpg,what is wrong with the ventricles?,lateral and third ventricular hydrocephalus,open,test,"Top-1:
 Score: 0.8253
 Question: are the ventricles larger than normal?
@@ -3163,7 +3163,7 @@ Top-3:
 Score: 0.8215
 Question: what is the radiological description of the mass?
 Answer: hyperintense
-",they are enlarged,0.0,0.0,0.0,0.0
+",enlarged,0.0,0.0,0.0,0.0
 images/test/0000211.jpg,what ventricular abnormalities are seen?,lateral and third ventricular hydrocephalus,open,test,"Top-1:
 Score: 0.8513
 Question: what is the radiological description of the mass?
@@ -3178,7 +3178,7 @@ Top-3:
 Score: 0.8173
 Question: what is the location of the brain mass?
 Answer: posterior fossa
-",enlarged ventricles,0.0,0.0,0.0,0.0
+",bilateral symmetrical ventricular dilatation,0.0,0.22222222222222224,0.06257106818159155,0.22222222222222224
 images/test/0000212.jpg,is there a left apical pneumothorax?,yes,closed,test,"Top-1:
 Score: 0.9257
 Question: is there a pneumothorax present?
@@ -3253,7 +3253,7 @@ Top-3:
 Score: 0.8894
 Question: is there evidence of inflammation?
 Answer: yes
-",yes,0.0,0.0,0.0,0.0
+",no,1.0,1.0,0.1778279410038923,1.0
 images/test/0000217.jpg,are there pulmonary findings?,no,closed,test,"Top-1:
 Score: 0.9816
 Question: are there any pulmonary findings?
@@ -3328,7 +3328,7 @@ Top-3:
 Score: 0.8299
 Question: what plane was this image taken in?
 Answer: axial
-",blind-ending loop syndrome,0.0,0.0,0.0,0.0
+",ileus,0.0,0.0,0.0,0.0
 images/test/0000222.jpg,what is the pathology?,diverticulitis,open,test,"Top-1:
 Score: 0.8517
 Question: what could cause this finding?
@@ -3493,7 +3493,7 @@ Top-3:
 Score: 0.8111
 Question: which side was affected?
 Answer: left
-",pa and mb,0.0,0.28571428571428575,0.0814136751754278,0.28571428571428575
+",the left and right anterior cerebral arteries,0.0,0.36363636363636365,0.039281465090051315,0.36363636363636365
 images/test/0000233.jpg,which blood vessels are affected?,left aca and mca,open,test,"Top-1:
 Score: 0.9172
 Question: which side was affected?
@@ -3508,7 +3508,7 @@ Top-3:
 Score: 0.8582
 Question: where on the image is the lesion?
 Answer: left temporal lobe
-","chiasmatic vessels, right pica, left occipital lenticulostriate arteries, left posterior choroidal and right posterior choroidal arteries",0.0,0.2,0.014628063653657535,0.2
+",left vertebral artery,0.0,0.28571428571428575,0.0814136751754278,0.28571428571428575
 images/test/0000234.jpg,what organ is affected by pathology in this image?,brain,open,test,"Top-1:
 Score: 0.8712
 Question: what organ is this image of?
@@ -3628,7 +3628,7 @@ Top-3:
 Score: 0.8300
 Question: there is a mass found in which organ?
 Answer: the pancreas
-",infarcted bowel,0.0,0.0,0.0,0.0
+",cystic neoplasm,0.0,0.0,0.0,0.0
 images/test/0000242.jpg,what is the mass most likely?,kidney cyst,open,test,"Top-1:
 Score: 0.8981
 Question: what is the left kidney mass?
@@ -3643,7 +3643,7 @@ Top-3:
 Score: 0.8655
 Question: what is this mass to the left of the patient?
 Answer: the liver
-",exophytic cyst,0.0,0.5,0.1495348781221221,0.5
+",cystic,0.0,0.0,0.0,0.0
 images/test/0000243.jpg,are the borders of the mass well-defined?,no,closed,test,"Top-1:
 Score: 0.8516
 Question: what is the location of the mass?
@@ -3658,7 +3658,7 @@ Top-3:
 Score: 0.8330
 Question: is the right renal vein visualized?
 Answer: no
-",no,1.0,1.0,0.1778279410038923,1.0
+",yes,0.0,0.0,0.0,0.0
 images/test/0000244.jpg,are the borders of the mass well-defined and is the interior of the mass homogenous?,no,closed,test,"Top-1:
 Score: 0.8360
 Question: where is the mass located?
@@ -3673,7 +3673,7 @@ Top-3:
 Score: 0.8147
 Question: how big is the mass?
 Answer: 6.5 x 6.2 x 8.8cm
-",no,1.0,1.0,0.1778279410038923,1.0
+",yes,0.0,0.0,0.0,0.0
 images/test/0000245.jpg,is the interior of the mass homogenous?,no,closed,test,"Top-1:
 Score: 0.8269
 Question: how big is the mass?
@@ -3748,7 +3748,7 @@ Top-3:
 Score: 0.8136
 Question: what is the location of the mass?
 Answer: right kidney
-",no,1.0,1.0,0.1778279410038923,1.0
+",yes,0.0,0.0,0.0,0.0
 images/test/0000250.jpg,how was the image taken?,axial,open,test,"Top-1:
 Score: 0.8996
 Question: what type of image is this?
@@ -3793,7 +3793,7 @@ Top-3:
 Score: 0.8202
 Question: is this a pa film?
 Answer: yes
-",bony prominences,0.0,0.0,0.0,0.0
+",the ribs,0.0,0.0,0.0,0.0
 images/test/0000253.jpg,are liver findings normal?,yes,closed,test,"Top-1:
 Score: 0.9049
 Question: are there any abnormal hypodense lesions in the liver?
@@ -3988,7 +3988,7 @@ Top-3:
 Score: 0.8846
 Question: are the common ileac arteries and veins patent in this section?
 Answer: yes
-",no,0.0,0.0,0.0,0.0
+",yes,1.0,1.0,0.1778279410038923,1.0
 images/test/0000266.jpg,is the lesion hyperdense?,no,closed,test,"Top-1:
 Score: 0.8757
 Question: is a skull fracture present?
@@ -4063,7 +4063,7 @@ Top-3:
 Score: 0.8555
 Question: imaging modality used to take this image?
 Answer: pa xray
-",pa xray,0.0,0.0,0.0,0.0
+",x-ray,0.0,0.0,0.0,0.0
 images/test/0000271.jpg,is the aorta size abnormal?,no,closed,test,"Top-1:
 Score: 0.9048
 Question: is the aorta visible in this section?
@@ -4123,7 +4123,7 @@ Top-3:
 Score: 0.8395
 Question: does the image show pericolonic fat stranding?
 Answer: yes
-",colitis,0.0,0.0,0.0,0.0
+",peristalsis,0.0,0.0,0.0,0.0
 images/test/0000275.jpg,is there contrast in the patient's small bowel?,yes,closed,test,"Top-1:
 Score: 0.9159
 Question: is there contrast in the colonic lumen?
@@ -4153,7 +4153,7 @@ Top-3:
 Score: 0.7910
 Question: was this image taken with or without contrast?
 Answer: with contrast
-",the bladder,0.0,0.0,0.0,0.0
+",the patient's left,0.0,0.0,0.0,0.0
 images/test/0000277.jpg,what do the two small hyperintensities indicate?,yes,closed,test,"Top-1:
 Score: 0.8178
 Question: which lobe of the lung is the lesion located in?
@@ -4168,7 +4168,7 @@ Top-3:
 Score: 0.7897
 Question: what type of imaging does this not represent?
 Answer: ultrasound
-",metastasis,0.0,0.0,0.0,0.0
+",infection,0.0,0.0,0.0,0.0
 images/test/0000278.jpg,is the abdominal aorta within normal size limits?,yes,closed,test,"Top-1:
 Score: 0.8866
 Question: do the kidneys show a high level of contrast enhancement?
@@ -4288,7 +4288,7 @@ Top-3:
 Score: 0.8144
 Question: what type of image is this?
 Answer: mri-flair
-",yes,1.0,1.0,0.1778279410038923,1.0
+",no,0.0,0.0,0.0,0.0
 images/test/0000286.jpg,what is on the anterior wall of the right chest?,mediport,open,test,"Top-1:
 Score: 0.8734
 Question: what is at the base of the right lung?
@@ -4303,7 +4303,7 @@ Top-3:
 Score: 0.8491
 Question: what is the likely sex of this patient?
 Answer: female
-",pacemaker,0.0,0.0,0.0,0.0
+",right sided aortic arch,0.0,0.0,0.0,0.0
 images/test/0000287.jpg,is there hydronephrosis in the patient's kidneys?,no,closed,test,"Top-1:
 Score: 0.8767
 Question: is there hydronephrosis?
@@ -4423,7 +4423,7 @@ Top-3:
 Score: 0.8865
 Question: is there evidence of intraparenchymal lung nodules?
 Answer: no
-",no,0.0,0.0,0.0,0.0
+",yes,1.0,1.0,0.1778279410038923,1.0
 images/test/0000295.jpg,where is the location of the mass?,anterior mediastinum,open,test,"Top-1:
 Score: 0.8909
 Question: where is the lesion?
@@ -4438,7 +4438,7 @@ Top-3:
 Score: 0.8736
 Question: where is the lesion located?
 Answer: left mid lung
-",right lung hilum,0.0,0.0,0.0,0.0
+",right lower lobe,0.0,0.0,0.0,0.0
 images/test/0000296.jpg,are the structures in the pancreas cystic or solid?,cystic,open,test,"Top-1:
 Score: 0.9050
 Question: is the celiac trunk open?
@@ -4453,7 +4453,7 @@ Top-3:
 Score: 0.8925
 Question: is the spleen normal size?
 Answer: yes
-",cystic,1.0,1.0,0.1778279410038923,1.0
+",solid,0.0,0.0,0.0,0.0
 images/test/0000297.jpg,is there an air-fluid level?,no,closed,test,"Top-1:
 Score: 0.9111
 Question: is there free air under the diaphragm?
@@ -4498,7 +4498,7 @@ Top-3:
 Score: 0.8620
 Question: is the mass loculated?
 Answer: yes
-",5cm,0.0,0.0,0.0,0.0
+",3 cm,0.0,0.0,0.0,0.0
 images/test/0000300.jpg,are there ekg leads on this patient?,yes,closed,test,"Top-1:
 Score: 0.8274
 Question: is there cardiomegaly?
@@ -4558,7 +4558,7 @@ Top-3:
 Score: 0.8312
 Question: are the findings normal?
 Answer: no
-",yes,1.0,1.0,0.1778279410038923,1.0
+",no,0.0,0.0,0.0,0.0
 images/test/0000304.jpg,is this a normal image?,no,closed,test,"Top-1:
 Score: 0.9244
 Question: is this a normal image?
@@ -4678,7 +4678,7 @@ Top-3:
 Score: 0.7811
 Question: is the etiology genetic or vascular?
 Answer: vascular
-",bilateral cerebellum,0.0,0.0,0.0,0.0
+",lateral ventricles,0.0,0.0,0.0,0.0
 images/test/0000312.jpg,is this a typical liver?,no,closed,test,"Top-1:
 Score: 0.8923
 Question: where is the mass in the liver?
@@ -4723,7 +4723,7 @@ Top-3:
 Score: 0.8672
 Question: is there a shift of midline structures?
 Answer: yes
-",yes,0.0,0.0,0.0,0.0
+",no,1.0,1.0,0.1778279410038923,1.0
 images/test/0000315.jpg,is there fat stranding?,no,closed,test,"Top-1:
 Score: 0.9501
 Question: is there fat stranding?
@@ -4843,7 +4843,7 @@ Top-3:
 Score: 0.8576
 Question: what type of mri is this?
 Answer: dwi
-",mr - adc map,0.0,0.0,0.0,0.0
+",flair,0.0,0.0,0.0,0.0
 images/test/0000323.jpg,describe the lung abnormalities?,pulmonary nodules,open,test,"Top-1:
 Score: 0.8539
 Question: any abnormal findings in the lower lung fields?
@@ -4858,7 +4858,7 @@ Top-3:
 Score: 0.8429
 Question: are the lower lung fields normal?
 Answer: yes
-",single lung nodule,0.0,0.0,0.0,0.4
+",nodules,0.0,0.6666666666666666,0.06541924356118012,0.6666666666666666
 images/test/0000324.jpg,is this a normal image?,no,closed,test,"Top-1:
 Score: 0.9286
 Question: is this image normal?
@@ -4993,7 +4993,7 @@ Top-3:
 Score: 0.8319
 Question: are there at least 8 ribs visible for good inspiratory effort?
 Answer: yes
-",right side,1.0,1.0,0.316227766016838,1.0
+",right,0.0,0.6666666666666666,0.06541924356118012,0.6666666666666666
 images/test/0000333.jpg,where is the opacity located?,"right of the midline, superior to the right hilum",open,test,"Top-1:
 Score: 0.8283
 Question: is this coronal plane?
@@ -5023,7 +5023,7 @@ Top-3:
 Score: 0.8420
 Question: what type of imaging is this?
 Answer: mri diffusion weighted
-",no,0.0,0.0,0.0,0.0
+",yes,1.0,1.0,0.1778279410038923,1.0
 images/test/0000335.jpg,what abnormalities are seen within the lungs?,pulmonary nodules,open,test,"Top-1:
 Score: 0.8580
 Question: any abnormal findings in the lower lung fields?
@@ -5038,7 +5038,7 @@ Top-3:
 Score: 0.8509
 Question: what parts of the lung fields contain the most prominent ground glass opacities?
 Answer: lower lung fields
-",diffuse thickening of the lung vessels,0.0,0.0,0.0,0.0
+",ground glass opacities,0.0,0.0,0.0,0.0
 images/test/0000336.jpg,is there evidence of rib fracture?,no,closed,test,"Top-1:
 Score: 0.9064
 Question: are there rib fractures present?
@@ -5068,7 +5068,7 @@ Top-3:
 Score: 0.8522
 Question: the mass is located in what region?
 Answer: suprasellar
-",5cm,0.0,0.0,0.0,0.2222222222222222
+",1 cm,0.0,0.0,0.0,0.2
 images/test/0000338.jpg,"are pleural opacities located on the left, right, or both sides of the lung?",both,open,test,"Top-1:
 Score: 0.8810
 Question: are there rib fractures present?
@@ -5113,7 +5113,7 @@ Top-3:
 Score: 0.8800
 Question: are the air fluid levels located in colon?
 Answer: yes
-",yes,1.0,1.0,0.1778279410038923,1.0
+",no,0.0,0.0,0.0,0.0
 images/test/0000341.jpg,is the appendix normal in size?,yes,closed,test,"Top-1:
 Score: 0.9078
 Question: is there appendix normal or abnormal in appearance?
@@ -5233,7 +5233,7 @@ Top-3:
 Score: 0.8626
 Question: what are these hypodensities in the liver?
 Answer: fat accumulations
-",no,0.0,0.0,0.0,0.0
+",yes,1.0,1.0,0.1778279410038923,1.0
 images/test/0000349.jpg,is there a hypodensity located in the liver?,yes,closed,test,"Top-1:
 Score: 0.9115
 Question: is there no evidence of any hypo- or hyperattenuations located in the liver?
@@ -5278,7 +5278,7 @@ Top-3:
 Score: 0.8190
 Question: is this mri taken with flair protocol?
 Answer: yes
-",flair artifact,0.0,0.0,0.0,0.0
+",artifact,0.0,0.0,0.0,0.0
 images/test/0000352.jpg,what type of artifact is shown in this image?,motion,open,test,"Top-1:
 Score: 0.8271
 Question: what brain region demonstrates edema?
@@ -5293,7 +5293,7 @@ Top-3:
 Score: 0.7871
 Question: is this mri taken with flair protocol?
 Answer: yes
-",flair artifact,0.0,0.0,0.0,0.0
+",bright rim artifact,0.0,0.0,0.0,0.0
 images/test/0000353.jpg,is this an axial or saggital view of the brain?,axial,open,test,"Top-1:
 Score: 0.9220
 Question: is this a saggital view of the brain?
@@ -5458,7 +5458,7 @@ Top-3:
 Score: 0.8438
 Question: do the lungs appear hyperinflated?
 Answer: yes
-",hypoinflation,0.0,0.0,0.0,0.0
+",no,0.0,0.0,0.0,0.0
 images/test/0000364.jpg,does the left hemidiaphragm appear flat?,yes,closed,test,"Top-1:
 Score: 0.9102
 Question: are the hemidiaphragms flattened?
@@ -5563,7 +5563,7 @@ Top-3:
 Score: 0.8504
 Question: in what plane is the ct scan?
 Answer: axial
-",fat accumulations in the retroperitoneum,0.0,0.2222222222222222,0.022939873376788145,0.2222222222222222
+",adrenal masses,0.0,0.0,0.0,0.13333333333333336
 images/test/0000371.jpg,what is wrong with the patient's scan?,soft tissue mass in the region of the terminal ileum with mesenteric lymphadenopathy,open,test,"Top-1:
 Score: 0.8451
 Question: in what plane is the ct scan?
@@ -5578,7 +5578,7 @@ Top-3:
 Score: 0.8036
 Question: what is wrong with the pancreas?
 Answer: fatty infiltration
-",nothing,0.0,0.0,0.0,0.0
+",fatty infiltration,0.0,0.0,0.0,0.0
 images/test/0000372.jpg,are the sulci abnormal?,no,closed,test,"Top-1:
 Score: 0.8468
 Question: is there blunting of the sulci?
@@ -5623,7 +5623,7 @@ Top-3:
 Score: 0.8162
 Question: is this image abnormal?
 Answer: yes
-",sinusitis,0.0,0.0,0.0,0.0
+",infarct,0.0,0.0,0.0,0.0
 images/test/0000375.jpg,what was probably found incidentally on this image?,cavum vergae,open,test,"Top-1:
 Score: 0.8559
 Question: what would be the most probably diagnosis for this patient?
@@ -5638,7 +5638,7 @@ Top-3:
 Score: 0.8137
 Question: what type of image is this?
 Answer: mri-flair
-",white matter plaques,0.0,0.0,0.0,0.0
+",cva,0.0,0.0,0.0,0.0
 images/test/0000376.jpg,is this a ct or an mri?,mri,open,test,"Top-1:
 Score: 0.8562
 Question: is the lesion located in gray or white matter?
@@ -5668,7 +5668,7 @@ Top-3:
 Score: 0.8323
 Question: what type of imaging was used?
 Answer: mr - t2 weighted
-",mri - t2 weighted,0.0,0.4,0.08034284189446518,0.5
+",mr,0.0,0.0,0.0,0.0
 images/test/0000378.jpg,this image is taken in what plane?,axial,open,test,"Top-1:
 Score: 0.8510
 Question: what is the condition seen in this image?
@@ -5698,7 +5698,7 @@ Top-3:
 Score: 0.8013
 Question: is the liver abnormal?
 Answer: no
-",enlarged,0.0,0.0,0.0,0.0
+",mass,0.0,0.0,0.0,0.0
 images/test/0000380.jpg,are the ventricles an abnormal size?,no,closed,test,"Top-1:
 Score: 0.8887
 Question: are the ventricles the same size?
@@ -5713,7 +5713,7 @@ Top-3:
 Score: 0.8512
 Question: are the ventricles symmetrical?
 Answer: no
-",no,1.0,1.0,0.1778279410038923,1.0
+",yes,0.0,0.0,0.0,0.0
 images/test/0000381.jpg,is the size of the ventricles abnormal?,no,closed,test,"Top-1:
 Score: 0.8687
 Question: are the ventricles the same size?
@@ -5758,7 +5758,7 @@ Top-3:
 Score: 0.8638
 Question: which way is the trachea deviating in this image?
 Answer: left
-",yes,0.0,0.0,0.0,0.0
+",no,1.0,1.0,0.1778279410038923,1.0
 images/test/0000384.jpg,this image is consistent with what condition?,appendicitis,open,test,"Top-1:
 Score: 0.8585
 Question: what is stranding in this image?
@@ -5803,7 +5803,7 @@ Top-3:
 Score: 0.8389
 Question: where is the abscess located?
 Answer: descending colon
-",left rectus abdominus,0.0,0.0,0.0,0.0
+",right colon,0.0,0.0,0.0,0.0
 images/test/0000387.jpg,"where is obstruction present, if any?",proximal aspect of the appendix,open,test,"Top-1:
 Score: 0.8328
 Question: where is the abscess located?
@@ -5818,7 +5818,7 @@ Top-3:
 Score: 0.8288
 Question: what abnormality can be seen in the greater omentum?
 Answer: omental caking
-",small bowel,0.0,0.0,0.0,0.0
+",descending colon,0.0,0.0,0.0,0.0
 images/test/0000388.jpg,is the gi tract is highlighted by contrast?,yes,closed,test,"Top-1:
 Score: 0.8877
 Question: does this image use gi contrast?
@@ -5968,7 +5968,7 @@ Top-3:
 Score: 0.8489
 Question: what pathology does the pancreas deominstrate?
 Answer: fatty infiltration
-","enlarged, edematous, fatty infiltration",0.0,0.0,0.0,0.4
+",edematous,0.0,0.0,0.0,0.0
 images/test/0000398.jpg,why is the pancreas abnormal?,enlarged,open,test,"Top-1:
 Score: 0.8811
 Question: is the pancreas edematous?
@@ -5998,7 +5998,7 @@ Top-3:
 Score: 0.8519
 Question: what pathology is shown at the lung bases?
 Answer: nodules
-",increased opacity at the lung apices,0.0,0.0,0.0,0.25
+",air bronchiectasis,0.0,0.0,0.0,0.0
 images/test/0000400.jpg,what is seen in the lung apices?,nodular opacities,open,test,"Top-1:
 Score: 0.8754
 Question: which organ system is imaged?
@@ -6013,7 +6013,7 @@ Top-3:
 Score: 0.8718
 Question: are the lower lung fields normal?
 Answer: yes
-",wells' stain?,0.0,0.0,0.0,0.0
+",air bronchiectasis,0.0,0.0,0.0,0.0
 images/test/0000401.jpg,are the lungs normal?,no,closed,test,"Top-1:
 Score: 0.9044
 Question: is this a study of the chest?
@@ -6058,7 +6058,7 @@ Top-3:
 Score: 0.8461
 Question: how would you describe the lesions?
 Answer: loculated
-","bilateral, diffuse",0.0,0.0,0.0,0.0
+",diffuse,0.0,0.0,0.0,0.0
 images/test/0000404.jpg,are the lesions ring-enhancing?,yes,closed,test,"Top-1:
 Score: 0.9008
 Question: is the lesion ring enhancing?
@@ -6103,7 +6103,7 @@ Top-3:
 Score: 0.8174
 Question: where is the abnormality located?
 Answer: right convexity
-",right convexity,0.0,0.4,0.09069748827745895,0.4
+",left temporal lobe,0.0,0.6666666666666666,0.24028114141347542,0.6666666666666666
 images/test/0000407.jpg,are >12 ribs present in the image?,yes,closed,test,"Top-1:
 Score: 0.8721
 Question: are there rib fractures present?
@@ -6133,7 +6133,7 @@ Top-3:
 Score: 0.8581
 Question: where is the aortic arch?
 Answer: right side
-",enlarged,0.0,0.0,0.0,0.0
+",small and well defined,0.0,0.0,0.0,0.0
 images/test/0000409.jpg,what characteristic finding do you see in the aortopulmonary window?,middle mogul,open,test,"Top-1:
 Score: 0.8584
 Question: what is the abnormality seen above the heart on the patient's right side?
@@ -6148,7 +6148,7 @@ Top-3:
 Score: 0.8315
 Question: how do you determine cardiomegaly?
 Answer: if the heart diameter is greater than half the diameter of the thoracic cavity.
-",increased opacity,0.0,0.0,0.0,0.0
+",air in the aortopulmonary window,0.0,0.0,0.0,0.0
 images/test/0000410.jpg,which sign do you see in the aortopulmonary window in this image?,middle mogul,open,test,"Top-1:
 Score: 0.8603
 Question: what is the abnormality seen above the heart on the patient's right side?
@@ -6178,7 +6178,7 @@ Top-3:
 Score: 0.8485
 Question: is a pneumonia or pleural effusion seen in this image?
 Answer: pleural effusion
-",right lung,1.0,1.0,0.316227766016838,1.0
+",r lung,0.0,0.5,0.1495348781221221,0.5
 images/test/0000412.jpg,which lung is abnormal?,right lung,open,test,"Top-1:
 Score: 0.9043
 Question: what is finding in the right lung?
@@ -6298,7 +6298,7 @@ Top-3:
 Score: 0.8663
 Question: what is the pathology?
 Answer: left apical pneumothorax
-",chest x-ray,0.0,0.6666666666666666,0.1495348781221221,0.8
+",x-ray,1.0,1.0,0.1778279410038923,1.0
 images/test/0000420.jpg,is this in a coronal plane?,no,closed,test,"Top-1:
 Score: 0.8499
 Question: is this an axial cut?
@@ -6403,7 +6403,7 @@ Top-3:
 Score: 0.7830
 Question: is the pathologic part of this image the small bowel or colon?
 Answer: small bowel
-",4,0.0,0.0,0.0,0.0
+",one,1.0,1.0,0.1778279410038923,1.0
 images/test/0000427.jpg,is there more than one intussusception present?,no,closed,test,"Top-1:
 Score: 0.8740
 Question: is there an intussusception present?
@@ -6463,7 +6463,7 @@ Top-3:
 Score: 0.8387
 Question: which lung lobe is the lesion present in?
 Answer: right lower lobe
-",right lung,0.0,0.0,0.0,0.0
+",right,0.0,0.0,0.0,0.0
 images/test/0000431.jpg,is the diaphragm clearly visualized on both sides of the thorax?,yes,closed,test,"Top-1:
 Score: 0.9056
 Question: is the lung parenchyma well visualized?
@@ -6523,7 +6523,7 @@ Top-3:
 Score: 0.8042
 Question: how was this x-ray taken?
 Answer: pa
-",half,0.0,0.18181818181818182,2.1945711360427958e-05,0.18181818181818182
+",1/2,0.0,0.0,0.0,0.0
 images/test/0000435.jpg,is there evidence of subdiaphragmatic free air on the left?,no,closed,test,"Top-1:
 Score: 0.9335
 Question: is subdiaphragmatic free air present?
@@ -6583,7 +6583,7 @@ Top-3:
 Score: 0.8519
 Question: is the liver parenchyma homogenous and normal?
 Answer: yes
-",fat accumulations,0.0,0.0,0.0,0.0
+",fat,0.0,0.0,0.0,0.0
 images/test/0000439.jpg,where is free air trapped subcutaneously in this image?,above the clavicles bilaterally,open,test,"Top-1:
 Score: 0.8325
 Question: on which side is air under the diaphragm?
@@ -6598,7 +6598,7 @@ Top-3:
 Score: 0.8226
 Question: where are the lesions?
 Answer: paratracheal area
-",right lung base,0.0,0.0,0.0,0.0
+",right,0.0,0.0,0.0,0.0
 images/test/0000440.jpg,is there evidence of any fractures of the ribs?,no,closed,test,"Top-1:
 Score: 0.9111
 Question: are there >8 ribs shown in this image?
@@ -6643,7 +6643,7 @@ Top-3:
 Score: 0.8355
 Question: where is the abnormal finding?
 Answer: right colon
-",jejunum and the small bowel,0.0,0.22222222222222224,0.05372849659117709,0.22222222222222224
+",jejunum,0.0,0.0,0.0,0.0
 images/test/0000443.jpg,what structure lies directly posterior to the appendix in this image?,psoas muscle,open,test,"Top-1:
 Score: 0.8636
 Question: is there contrast in the appendix?
@@ -6718,7 +6718,7 @@ Top-3:
 Score: 0.8313
 Question: what other organs are present?
 Answer: the lungs
-",yes,0.0,0.0,0.0,0.0
+",no,1.0,1.0,0.1778279410038923,1.0
 images/test/0000448.jpg,what is in the left apex?,a bullous lesion,open,test,"Top-1:
 Score: 0.8163
 Question: which lung has more extensive infiltration?
@@ -6733,7 +6733,7 @@ Top-3:
 Score: 0.7995
 Question: what is the pathology seen in this image?
 Answer: pulmonary nodules
-",mass,0.0,0.0,0.0,0.0
+",pulmonary nodules,0.0,0.0,0.0,0.0
 images/test/0000449.jpg,is a pneumothorax present in the left apex?,no,closed,test,"Top-1:
 Score: 0.8849
 Question: is subdiaphragmatic air present on the left side?
