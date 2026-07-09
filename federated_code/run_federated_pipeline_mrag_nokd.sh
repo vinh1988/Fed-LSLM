@@ -20,8 +20,16 @@ SETTING="noniid"
 ALPHA=0.1
 K=2
 MODE="04_train_client_continue_mrag_nokd"
-MODEL_NAME="Qwen/Qwen2.5-VL-3B-Instruct"
-MODEL_SHORT="Qwen2.5-VL-3B-Instruct"
+MODEL_VERSION="2.5"  # Options: "2" or "2.5"
+
+# Set model based on version
+if [ "$MODEL_VERSION" = "2" ]; then
+    MODEL_NAME="Qwen/Qwen2-VL-2B-Instruct"
+    MODEL_SHORT="Qwen2-VL-2B-Instruct"
+else
+    MODEL_NAME="Qwen/Qwen2.5-VL-3B-Instruct"
+    MODEL_SHORT="Qwen2.5-VL-3B-Instruct"
+fi
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -46,6 +54,18 @@ while [[ $# -gt 0 ]]; do
             MODE="$2"
             shift 2
             ;;
+        --model_version)
+            MODEL_VERSION="$2"
+            # Update model based on version
+            if [ "$MODEL_VERSION" = "2" ]; then
+                MODEL_NAME="Qwen/Qwen2-VL-2B-Instruct"
+                MODEL_SHORT="Qwen2-VL-2B-Instruct"
+            else
+                MODEL_NAME="Qwen/Qwen2.5-VL-3B-Instruct"
+                MODEL_SHORT="Qwen2.5-VL-3B-Instruct"
+            fi
+            shift 2
+            ;;
         --model_name)
             MODEL_NAME="$2"
             shift 2
@@ -62,8 +82,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --alpha ALPHA           Alpha for noniid (default: 0.1)"
             echo "  --k K                   Number of clients (default: 2)"
             echo "  --mode MODE              Script name suffix (default: 04_train_client_continue_mrag_nokd)"
-            echo "  --model_name MODEL_NAME  VLM model name from HuggingFace (default: Qwen/Qwen2.5-VL-3B-Instruct)"
-            echo "  --model_short MODEL_SHORT Short model name for directory naming (default: Qwen2.5-VL-3B-Instruct)"
+            echo "  --model_version VERSION  Qwen version: 2 or 2.5 (default: 2.5)"
+            echo "  --model_name MODEL_NAME  VLM model name from HuggingFace (auto-set by model_version by default)"
+            echo "  --model_short MODEL_SHORT Short model name for directory naming (auto-set by model_version by default)"
             echo "  --help                  Show this help message"
             exit 0
             ;;
