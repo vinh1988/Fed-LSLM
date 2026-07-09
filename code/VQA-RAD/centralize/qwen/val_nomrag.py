@@ -81,8 +81,41 @@ def build_zeroshot_content(query_image, question, question_type):
 
 
 # ── Metrics ──────────────────────────────────────────────────────────────────
+def _normalize(text: str) -> str:
+    """Normalize text for comparison: lowercase, remove punctuation, strip whitespace."""
+    import string
+    text = text.lower().strip()
+    text = ''.join(ch for ch in text if ch not in string.punctuation)
+    text = ' '.join(text.split())  # Remove extra whitespace
+    return text
+
 def compute_exact_match(prediction, ground_truth):
     return 1.0 if prediction.strip().lower() == ground_truth.strip().lower() else 0.0
+
+def compute_flexible_match(pred: str, gt: str) -> float:
+    """
+    More flexible matching for open-ended questions.
+    Returns 1.0 if:
+    - Exact match after normalization
+    - Prediction is a substring of ground truth (e.g., "intestine" matches "the small intestines")
+    - Ground truth is a substring of prediction (e.g., "the small intestines" matches "intestines")
+    """
+    norm_pred = _normalize(pred)
+    norm_gt = _normalize(gt)
+    
+    # Exact match
+    if norm_pred == norm_gt:
+        return 1.0
+    
+    # Check if prediction is substring of ground truth
+    if norm_pred in norm_gt:
+        return 1.0
+    
+    # Check if ground truth is substring of prediction
+    if norm_gt in norm_pred:
+        return 1.0
+    
+    return 0.0
 
 def compute_bleu(prediction, ground_truth):
     ref = [ground_truth.strip().lower().split()]
@@ -205,17 +238,9 @@ def main():
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
-    # 4-bit quantization to drastically reduce memory footprint
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch_dtype,
-        bnb_4bit_use_double_quant=True
-    )
-
+    # Load without quantization for validation (inference-only, no memory pressure)
     base_model = ModelClass.from_pretrained(
         args.model_name,
-        quantization_config=bnb_config,
         torch_dtype=torch_dtype,
         device_map="auto",
         cache_dir=CACHE_DIR
@@ -289,8 +314,8 @@ def main():
 
     # Open metrics
     log("Computing open-ended metrics...")
-    o_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
-    o_em = o_acc
+    o_acc = float(np.mean([compute_flexible_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
+    o_em = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_bleu = float(np.mean([compute_bleu(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_rouge = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_bert = compute_bert_score(open_preds, open_gts) if open_preds else 0.0
