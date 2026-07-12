@@ -468,7 +468,8 @@ def main():
 
     # 3. Load FedAvg Adapter
     log(f"Loading global adapter from {args.global_adapter}...")
-    model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter)), is_trainable=True, is_local=True)
+    adapter_path = str(Path(args.global_adapter).as_posix())
+    model = PeftModel.from_pretrained(base_model, adapter_path, is_trainable=True, is_local=True)
     model.print_trainable_parameters()
 
     train_loader = DataLoader(
