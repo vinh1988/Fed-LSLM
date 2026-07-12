@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import gc
 import json
 import time
@@ -368,7 +369,7 @@ def main():
                         help="Path to global adapter from step 02 (auto-generated if not provided)")
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=1)
-    parser.add_argument("--grad_accum", type=int, default=8)
+    parser.add_argument("--grad_accum", type=int, default=2)
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
@@ -397,7 +398,7 @@ def main():
 
     # 1. Load Processor and Base Model ONCE
     log(f"Loading base model {args.model_name}...")
-    processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=128 * 28 * 28, max_pixels=256 * 28 * 28, cache_dir=project_root / ".hf_cache")
+    processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=64 * 28 * 28, max_pixels=128 * 28 * 28, cache_dir=project_root / ".hf_cache")
     processor.tokenizer.padding_side = "right"
     if processor.tokenizer.pad_token is None:
         processor.tokenizer.pad_token = processor.tokenizer.eos_token
@@ -448,6 +449,9 @@ def main():
     model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter)), is_trainable=True)
     model.print_trainable_parameters()
 
+    # Enable gradient checkpointing to reduce memory usage
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+
     # 3. Save a deep copy of the global adapter weights
     global_state_dict = {k: v.clone().cpu() for k, v in model.state_dict().items() if v.requires_grad}
 
@@ -461,6 +465,11 @@ def main():
 
         # Restore global weights to ensure isolation
         model.load_state_dict(global_state_dict, strict=False)
+
+        # Clear GPU cache before training next client
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()
 
         client_csv, test_csv, image_root = resolve_data_paths(args.dataset, args.setting, args.alpha, args.k, client_id)
         out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id, args.model_short)

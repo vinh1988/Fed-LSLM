@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import gc
 import json
 import time
@@ -503,8 +504,8 @@ def train_single_client(args, client_id: int):
     log(f"Loading processor & VLM: {args.model_name}...")
     processor = AutoProcessor.from_pretrained(
         args.model_name,
-        min_pixels=128 * 28 * 28,
-        max_pixels=256 * 28 * 28,
+        min_pixels=64 * 28 * 28,
+        max_pixels=128 * 28 * 28,
         cache_dir=project_root / ".hf_cache"
     )
     processor.tokenizer.padding_side = "right"
@@ -558,10 +559,9 @@ def train_single_client(args, client_id: int):
     )
 
     lora_config = LoraConfig(
-        r=8,
-        lora_alpha=16,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                        "gate_proj", "up_proj", "down_proj"],
+        r=4,
+        lora_alpha=8,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         lora_dropout=0.05,
         bias="none",
         task_type=TaskType.CAUSAL_LM,
@@ -788,11 +788,11 @@ def main():
     # ── Training hyperparams ─────────────────────────────────────────────────
     parser.add_argument("--epochs",     type=int,   default=1)
     parser.add_argument("--batch_size", type=int,   default=1)
-    parser.add_argument("--grad_accum", type=int,   default=8,
+    parser.add_argument("--grad_accum", type=int,   default=2,
                         help="Gradient accumulation steps")
     parser.add_argument("--lr",         type=float, default=2e-4)
     parser.add_argument("--seed",       type=int,   default=42)
-    parser.add_argument("--max_length", type=int,   default=512)
+    parser.add_argument("--max_length", type=int,   default=256)
 
     args = parser.parse_args()
 
