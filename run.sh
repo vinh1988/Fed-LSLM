@@ -30,6 +30,16 @@ set -euo pipefail
 # bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 4
 # bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 5
 
+# bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --model_version 2
+# bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 3 --model_version 2
+# bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 4 --model_version 2
+# bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 5 --model_version 2
+
+bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --model_version 2.5
+bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 3 --model_version 2.5
+bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 4 --model_version 2.5
+bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 5 --model_version 2.5
+
 # bash federated_code/run_federated_pipeline_mrag_kd.sh \
 #   --dataset VQA-RAD --setting noniid --alpha 0.1 --k 3 \
 #   --model_version 2
@@ -44,7 +54,14 @@ set -euo pipefail
 # bash federated_code/run_federated_pipeline_nomrag_kd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 4 --model_version 2
 # bash federated_code/run_federated_pipeline_nomrag_kd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 5 --model_version 2
 
-bash federated_code/run_federated_pipeline_mrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --model_version 2
-bash federated_code/run_federated_pipeline_mrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 3 --model_version 2
-bash federated_code/run_federated_pipeline_mrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 4 --model_version 2
-bash federated_code/run_federated_pipeline_mrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 5 --model_version 2
+# bash federated_code/run_federated_pipeline_mrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --model_version 2
+# bash federated_code/run_federated_pipeline_mrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 3 --model_version 2
+# bash federated_code/run_federated_pipeline_mrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 4 --model_version 2
+# bash federated_code/run_federated_pipeline_mrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 5 --model_version 2
+
+# bash federated_code/run_federated_pipeline_mrag_kd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --model_version 2
+# bash federated_code/run_federated_pipeline_mrag_kd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 3 --model_version 2
+# bash federated_code/run_federated_pipeline_mrag_kd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 4 --model_version 2
+# bash federated_code/run_federated_pipeline_mrag_kd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 5 --model_version 2
+
+bash federated_code/run_federated_pipeline_mrag_kd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 5 --model_version 2.5
