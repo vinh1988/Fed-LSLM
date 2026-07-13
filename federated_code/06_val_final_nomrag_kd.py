@@ -241,7 +241,8 @@ def main():
     base_model = ModelClass.from_pretrained(args.model_name, torch_dtype=torch_dtype, device_map="auto", cache_dir=CACHE_DIR)
     
     log(f"Loading global adapter final: {args.global_adapter_final}...")
-    model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter_final)))
+    adapter_path = str(Path(args.global_adapter_final).as_posix())
+    model = PeftModel.from_pretrained(base_model, adapter_path)
     model.eval()
 
     rouge_scr = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)

@@ -415,7 +415,8 @@ def main():
 
     # 2. Load ROCO-trained Adapter (global initialization state)
     log(f"Loading pretrained ROCO Slake adapter from {args.global_adapter_roco_slake}...")
-    model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter_roco_slake)), is_trainable=True, is_local=True)
+    adapter_path = str(Path(args.global_adapter_roco_slake).as_posix())
+    model = PeftModel.from_pretrained(base_model, adapter_path, is_trainable=True, is_local=True)
     model.print_trainable_parameters()
 
     # 3. Save a deep copy of the global adapter weights
