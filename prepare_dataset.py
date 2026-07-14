@@ -5,6 +5,7 @@ prepare_dataset.py
 End-to-end dataset preparation for:
 - PathVQA
 - VQA-RAD
+- SLAKE
 
 Features:
 1. Download from Hugging Face
@@ -18,12 +19,18 @@ Dependencies:
     pip install datasets pandas pillow numpy tqdm
 
 Usage:
+    # Process all datasets
     python prepare_dataset.py
+
+    # Process specific dataset(s)
+    python prepare_dataset.py --datasets PathVQA VQA-RAD
+    python prepare_dataset.py --datasets SLAKE
 """
 
 from pathlib import Path
 import json
 import shutil
+import argparse
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -51,6 +58,7 @@ def get_question_type(answer):
 DATASETS = {
     "PathVQA": "flaviagiammarino/path-vqa",
     "VQA-RAD": "flaviagiammarino/vqa-rad",
+    "SLAKE": "BoKelvin/SLAKE",
 }
 
 OUTPUT_ROOT = Path("processed_data")
@@ -100,6 +108,85 @@ def export_split(split_ds, split_name, out_dir):
             "split": split_name
         })
 
+    df = pd.DataFrame(rows)
+
+    csv_path = out_dir / f"{split_name}.csv"
+    df.to_csv(csv_path, index=False)
+
+    return df
+
+
+def export_slake_split(split_ds, split_name, out_dir, dataset, images_source_dir):
+    """Custom export for SLAKE dataset with extended metadata from local files"""
+    images_dir = out_dir / "images" / split_name
+    ensure_dir(images_dir)
+
+    rows = []
+
+    # Process all xmlab* directories
+    xmlab_dirs = sorted([d for d in images_source_dir.iterdir() if d.is_dir() and d.name.startswith('xmlab')])
+    
+    img_idx = 0
+    for xmlab_dir in tqdm(xmlab_dirs, desc=f"Processing SLAKE {split_name}"):
+        question_file = xmlab_dir / "question.json"
+        detection_file = xmlab_dir / "detection.json"
+        
+        if not question_file.exists():
+            continue
+        
+        # Load question data
+        with open(question_file, 'r', encoding='utf-8') as f:
+            questions_data = json.load(f)
+        
+        # Load detection data
+        detection_data = []
+        if detection_file.exists():
+            try:
+                with open(detection_file, 'r', encoding='utf-8') as f:
+                    detection_data = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                pass
+        
+        # Process each question
+        for item in questions_data:
+            # Filter for English only
+            if item.get("q_lang", "en") != "en":
+                continue
+            
+            img_name = item["img_name"]  # e.g., "xmlab0/source.jpg"
+            source_img_path = images_source_dir / img_name
+            
+            # Copy image to target directory with sequential naming
+            img_path = images_dir / f"{img_idx:07d}.jpg"
+            
+            if source_img_path.exists():
+                shutil.copy(source_img_path, img_path)
+                relative_path = str(img_path.relative_to(out_dir))
+            else:
+                print(f"Warning: Image not found: {source_img_path}")
+                relative_path = ""
+            
+            # Get object information from detection data
+            num_objects = len(detection_data) if detection_data else 0
+            objects_str = json.dumps(detection_data) if detection_data else ""
+            
+            # Map SLAKE fields to VQA-RAD structure
+            question_type = item.get("answer_type", "OPEN").lower()
+            rows.append({
+                "image_path": relative_path,
+                "question": item["question"],
+                "answer": item["answer"],
+                "q_language": item.get("q_lang", "en"),
+                "question_type": question_type,
+                "body_part": item.get("location", ""),  # location -> body_part
+                "modality": item.get("modality", ""),
+                "num_objects": num_objects,
+                "objects": objects_str,
+                "split": split_name
+            })
+            
+            img_idx += 1
+    
     df = pd.DataFrame(rows)
 
     csv_path = out_dir / f"{split_name}.csv"
@@ -209,8 +296,6 @@ def process_dataset(dataset_name, hf_name):
     print(f"Processing {dataset_name}")
     print(f"{'='*80}\n")
 
-    dataset = load_dataset(hf_name)
-
     base_dir = OUTPUT_ROOT / dataset_name
 
     raw_dir = base_dir / "raw"
@@ -222,12 +307,28 @@ def process_dataset(dataset_name, hf_name):
 
     exported = {}
 
-    for split_name in dataset.keys():
-        exported[split_name] = export_split(
-            dataset[split_name],
-            split_name,
-            raw_dir
-        )
+    # Use custom export for SLAKE from local files, standard for others from HF
+    if dataset_name == "SLAKE":
+        # SLAKE images are in processed_data/Slake/images/imgs
+        images_source_dir = base_dir / "images" / "imgs"
+        
+        # Process train, validation, test splits from local data
+        for split_name in ["train", "validation", "test"]:
+            exported[split_name] = export_slake_split(
+                None,  # No HF dataset needed
+                split_name,
+                raw_dir,
+                None,  # No HF dataset needed
+                images_source_dir
+            )
+    else:
+        dataset = load_dataset(hf_name)
+        for split_name in dataset.keys():
+            exported[split_name] = export_split(
+                dataset[split_name],
+                split_name,
+                raw_dir
+            )
     
     save_dataset_summary(
         exported,
@@ -291,9 +392,21 @@ def process_dataset(dataset_name, hf_name):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Prepare datasets for federated learning")
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        choices=list(DATASETS.keys()),
+        help="Specific datasets to process (default: all)"
+    )
+    args = parser.parse_args()
+
     ensure_dir(OUTPUT_ROOT)
 
-    for dataset_name, hf_name in DATASETS.items():
+    datasets_to_process = args.datasets if args.datasets else list(DATASETS.keys())
+
+    for dataset_name in datasets_to_process:
+        hf_name = DATASETS[dataset_name]
         process_dataset(dataset_name, hf_name)
 
     print("\nAll datasets prepared successfully.")
