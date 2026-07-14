@@ -312,15 +312,57 @@ def process_dataset(dataset_name, hf_name):
         # SLAKE images are in processed_data/Slake/images/imgs
         images_source_dir = base_dir / "images" / "imgs"
         
-        # Process train, validation, test splits from local data
-        for split_name in ["train", "validation", "test"]:
-            exported[split_name] = export_slake_split(
-                None,  # No HF dataset needed
-                split_name,
-                raw_dir,
-                None,  # No HF dataset needed
-                images_source_dir
-            )
+        # Process all SLAKE data once, then split into train/val/test
+        all_data = export_slake_split(
+            None,  # No HF dataset needed
+            "all",  # Process all data
+            raw_dir,
+            None,  # No HF dataset needed
+            images_source_dir
+        )
+        
+        # Split into train/validation/test (70/15/15)
+        train_df = all_data.sample(frac=0.7, random_state=SEED)
+        remaining = all_data.drop(train_df.index)
+        val_df = remaining.sample(frac=0.5, random_state=SEED)  # 15% of total
+        test_df = remaining.drop(val_df.index)  # 15% of total
+        
+        # Move images to correct split directories and update paths
+        all_images_dir = raw_dir / "images" / "all"
+        
+        for split_name, df in [("train", train_df), ("validation", val_df), ("test", test_df)]:
+            split_images_dir = raw_dir / "images" / split_name
+            ensure_dir(split_images_dir)
+            
+            # Update image paths and copy images
+            new_image_paths = []
+            for idx, row in df.iterrows():
+                old_path = row["image_path"]  # e.g., "images/all/0000001.jpg"
+                old_filename = Path(old_path).name  # e.g., "0000001.jpg"
+                new_path = f"images/{split_name}/{old_filename}"
+                new_image_paths.append(new_path)
+                
+                # Copy image from all to split directory
+                src = raw_dir / old_path
+                dst = split_images_dir / old_filename
+                if src.exists() and not dst.exists():
+                    shutil.copy(src, dst)
+            
+            df["image_path"] = new_image_paths
+            df["split"] = split_name  # Update split column to match actual split
+            
+            # Save split CSV
+            csv_path = raw_dir / f"{split_name}.csv"
+            df.to_csv(csv_path, index=False)
+            print(f"Saved {split_name} split: {len(df)} samples")
+        
+        exported["train"] = train_df
+        exported["validation"] = val_df
+        exported["test"] = test_df
+        
+        # Clean up images/all directory
+        if all_images_dir.exists():
+            shutil.rmtree(all_images_dir)
     else:
         dataset = load_dataset(hf_name)
         for split_name in dataset.keys():
