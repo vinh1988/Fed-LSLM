@@ -6,10 +6,9 @@ set -e  # Exit on error
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-PROJECT_ROOT_WIN=$(cygpath -w "$PROJECT_ROOT")
 
 # Configuration
-DATA_DIR="$PROJECT_ROOT_WIN/processed_data/Slake/centralized"
+DATA_DIR="$PROJECT_ROOT/processed_data/Slake/centralized"
 MODELS=(
     "HuggingFaceTB/SmolVLM-500M-Instruct"
 )
@@ -31,7 +30,7 @@ echo "=========================================="
 for RAG_TYPE in "${RAG_TYPES[@]}"; do
     for MODEL_NAME in "${MODELS[@]}"; do
         MODEL_SHORT=$(basename "$MODEL_NAME")
-        OUTPUT_DIR="$PROJECT_ROOT_WIN/experiments/Slake/centralized/$MODEL_SHORT/$RAG_TYPE"
+        OUTPUT_DIR="$PROJECT_ROOT/experiments/Slake/centralized/$MODEL_SHORT/$RAG_TYPE"
         ADAPTER_CONFIG="$OUTPUT_DIR/best_lora_adapter/adapter_config.json"
         VAL_METRICS="$OUTPUT_DIR/best_lora_adapter/val/metrics.json"
 

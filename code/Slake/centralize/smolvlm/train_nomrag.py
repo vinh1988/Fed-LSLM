@@ -15,6 +15,7 @@ import os
 import gc
 import argparse
 import random
+import time
 import torch
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
@@ -91,7 +92,10 @@ class MedVQADataset(Dataset):
         objects = row.get('objects', '')
         
         # Load query image
-        query_image = self._load_image(self.data_dir / row['image_path'])
+        image_path = row['image_path']
+        if pd.isna(image_path) or not isinstance(image_path, (str, Path)):
+            raise ValueError(f"Invalid image_path: {image_path} at row {idx}. Row data: {row.to_dict()}")
+        query_image = self._load_image(self.data_dir / str(image_path))
             
         return {
             "query_image": query_image,
@@ -223,11 +227,15 @@ def get_collate_fn(processor):
 
 # Evaluation metric helpers
 def compute_exact_match(prediction, ground_truth):
-    return 1.0 if prediction.strip().lower() == ground_truth.strip().lower() else 0.0
+    gt_str = str(ground_truth).strip() if ground_truth is not None else ""
+    pred_str = str(prediction).strip() if prediction is not None else ""
+    return 1.0 if pred_str.lower() == gt_str.lower() else 0.0
 
 def compute_f1(prediction, ground_truth):
-    pred_tokens = prediction.strip().lower().split()
-    gt_tokens = ground_truth.strip().lower().split()
+    gt_str = str(ground_truth).strip() if ground_truth is not None else ""
+    pred_str = str(prediction).strip() if prediction is not None else ""
+    pred_tokens = pred_str.lower().split()
+    gt_tokens = gt_str.lower().split()
     if not pred_tokens or not gt_tokens:
         return 1.0 if pred_tokens == gt_tokens else 0.0
     common = Counter(pred_tokens) & Counter(gt_tokens)
@@ -239,13 +247,17 @@ def compute_f1(prediction, ground_truth):
     return (2 * precision * recall) / (precision + recall)
 
 def compute_bleu(prediction, ground_truth):
-    ref = [ground_truth.strip().lower().split()]
-    hyp = prediction.strip().lower().split()
+    gt_str = str(ground_truth).strip() if ground_truth is not None else ""
+    pred_str = str(prediction).strip() if prediction is not None else ""
+    ref = [gt_str.lower().split()]
+    hyp = pred_str.lower().split()
     smooth = SmoothingFunction().method1
     return sentence_bleu(ref, hyp, smoothing_function=smooth)
 
 def compute_rouge_l(prediction, ground_truth, scorer):
-    scores = scorer.score(ground_truth.strip().lower(), prediction.strip().lower())
+    gt_str = str(ground_truth).strip() if ground_truth is not None else ""
+    pred_str = str(prediction).strip() if prediction is not None else ""
+    scores = scorer.score(gt_str.lower(), pred_str.lower())
     return scores['rougeL'].fmeasure
 
 # Helper to load image with fallback
@@ -269,10 +281,15 @@ def evaluate_model(model, processor, test_df, data_dir, scorer, device, desc="Ev
         q_type_raw = str(row.get('question_type', 'open')).lower()
         question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
         
+        # Get medical context fields
+        body_part = row.get('body_part', '')
+        modality = row.get('modality', '')
+        objects = row.get('objects', '')
+        
         # Load query image
         query_image = _load_image_safe(data_dir / row['image_path'])
         
-        zeroshot_content = build_zeroshot_content(query_image, question, question_type)
+        zeroshot_content = build_zeroshot_content(query_image, question, question_type, body_part, modality, objects)
         
         messages = [{"role": "user", "content": zeroshot_content}]
         
@@ -435,6 +452,10 @@ def main():
     # ----------------------------------------------------
     # Step 2: Setup Dataset & DataLoader
     # ----------------------------------------------------
+    # Limit to first 10 samples for quick testing
+    # train_df = train_df.head(10)
+    # test_df = test_df.head(10)
+    
     train_dataset = MedVQADataset(train_df, data_dir, max_length=args.max_length)
     train_loader = DataLoader(
         train_dataset,
@@ -460,15 +481,25 @@ def main():
     
     log("Starting training...")
     best_em = -1.0
+    epoch_times = []
+    epoch_vram_usage = []
     
     for epoch in range(1, args.epochs + 1):
         model.train()
         epoch_loss = 0.0
         optimizer.zero_grad()
         
+        epoch_start_time = time.time()
+        vram_samples = []
+        
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch}/{args.epochs}")
         for step, batch in enumerate(progress_bar):
             batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+            
+            # Track VRAM usage
+            if torch.cuda.is_available():
+                vram_allocated = torch.cuda.memory_allocated() / (1024**3)  # GB
+                vram_samples.append(vram_allocated)
             
             outputs = model(**batch)
             
@@ -487,8 +518,14 @@ def main():
                 
             progress_bar.set_postfix({"loss": f"{loss.item() * args.gradient_accumulation_steps:.4f}"})
             
+        epoch_time = time.time() - epoch_start_time
+        epoch_times.append(epoch_time)
+        
+        avg_vram = sum(vram_samples) / len(vram_samples) if vram_samples else 0.0
+        epoch_vram_usage.append(avg_vram)
+        
         avg_loss = epoch_loss / len(train_loader)
-        log(f"Epoch {epoch} finished. Average Loss: {avg_loss:.4f}")
+        log(f"Epoch {epoch} finished. Average Loss: {avg_loss:.4f}, Time: {epoch_time:.2f}s, Avg VRAM: {avg_vram:.2f}GB")
         
         # Evaluate model after each epoch
         metrics, predictions = evaluate_model(model, processor, test_df, data_dir, scorer, device, desc="Test")
@@ -509,6 +546,22 @@ def main():
             results_df['ROUGE-L'] = [compute_rouge_l(p, r.answer, scorer) for p, r in zip(predictions, test_df.itertuples())]
             results_df.to_csv(output_dir / "best_predictions.csv", index=False)
             log(f"Saved predictions and scores to {output_dir / 'best_predictions.csv'}")
+            
+            # Save training performance metrics
+            avg_epoch_time = sum(epoch_times) / len(epoch_times) if epoch_times else 0.0
+            avg_vram = sum(epoch_vram_usage) / len(epoch_vram_usage) if epoch_vram_usage else 0.0
+            
+            training_metrics = {
+                "avg_epoch_time_s": avg_epoch_time,
+                "avg_allocated_vram_gb": avg_vram,
+                "epoch_times": epoch_times,
+                "epoch_vram_usage_gb": epoch_vram_usage
+            }
+            
+            import json
+            with open(output_dir / "best_lora_adapter" / "training_performance.json", "w") as f:
+                json.dump(training_metrics, f, indent=2)
+            log(f"Saved training performance metrics to {output_dir / 'best_lora_adapter' / 'training_performance.json'}")
 
     log("Training completed successfully!")
 

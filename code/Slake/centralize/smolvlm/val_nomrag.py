@@ -106,8 +106,41 @@ def build_zeroshot_content(query_image, question, question_type, body_part, moda
 
 
 # ── Metrics ──────────────────────────────────────────────────────────────────
+def _normalize(text: str) -> str:
+    """Normalize text for comparison: lowercase, remove punctuation, strip whitespace."""
+    import string
+    text = text.lower().strip()
+    text = ''.join(ch for ch in text if ch not in string.punctuation)
+    text = ' '.join(text.split())  # Remove extra whitespace
+    return text
+
 def compute_exact_match(prediction, ground_truth):
     return 1.0 if prediction.strip().lower() == ground_truth.strip().lower() else 0.0
+
+def compute_flexible_match(pred: str, gt: str) -> float:
+    """
+    More flexible matching for open-ended questions.
+    Returns 1.0 if:
+    - Exact match after normalization
+    - Prediction is a substring of ground truth (e.g., "intestine" matches "the small intestines")
+    - Ground truth is a substring of prediction (e.g., "the small intestines" matches "intestines")
+    """
+    norm_pred = _normalize(pred)
+    norm_gt = _normalize(gt)
+    
+    # Exact match
+    if norm_pred == norm_gt:
+        return 1.0
+    
+    # Check if prediction is substring of ground truth
+    if norm_pred in norm_gt:
+        return 1.0
+    
+    # Check if ground truth is substring of prediction
+    if norm_gt in norm_pred:
+        return 1.0
+    
+    return 0.0
 
 def compute_bleu(prediction, ground_truth):
     ref = [ground_truth.strip().lower().split()]
@@ -218,6 +251,10 @@ def main():
 
     test_df = pd.read_csv(args.test_csv)
     image_root = Path(args.image_root)
+    
+    # Limit to first 10 samples for quick testing
+    # test_df = test_df.head(10)
+    
     log(f"Test samples: {len(test_df)}")
 
     # ── Step 1: Load VLM and Adapter ──────────────────────────────────────────
@@ -225,18 +262,25 @@ def main():
     processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=128*28*28, max_pixels=256*28*28, cache_dir=CACHE_DIR)
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    if "qwen2.5" in args.model_name.lower():
+    if "smolvlm" in args.model_name.lower():
+        from transformers import AutoModelForImageTextToText as ModelClass
+    elif "qwen2.5" in args.model_name.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
-    # 4-bit quantization to drastically reduce memory footprint
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch_dtype,
-        bnb_4bit_use_double_quant=True
-    )
+    # Skip quantization for Idefics3/SmolVLM due to compatibility issues
+    if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+        log(f"Skipping quantization for {args.model_name} (Idefics3/SmolVLM)")
+        bnb_config = None
+    else:
+        # 4-bit quantization to drastically reduce memory footprint
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch_dtype,
+            bnb_4bit_use_double_quant=True
+        )
 
     base_model = ModelClass.from_pretrained(
         args.model_name,
@@ -320,8 +364,8 @@ def main():
 
     # Open metrics
     log("Computing open-ended metrics...")
-    o_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
-    o_em = o_acc
+    o_acc = float(np.mean([compute_flexible_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
+    o_em = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_bleu = float(np.mean([compute_bleu(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_rouge = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_bert = compute_bert_score(open_preds, open_gts) if open_preds else 0.0

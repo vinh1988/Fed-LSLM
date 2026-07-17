@@ -163,8 +163,8 @@ def export_slake_split(split_ds, split_name, out_dir, dataset, images_source_dir
                 shutil.copy(source_img_path, img_path)
                 relative_path = str(img_path.relative_to(out_dir))
             else:
-                print(f"Warning: Image not found: {source_img_path}")
-                relative_path = ""
+                print(f"Warning: Image not found: {source_img_path}, skipping question")
+                continue  # Skip this question if image is not found
             
             # Get object information from detection data
             num_objects = len(detection_data) if detection_data else 0
@@ -296,7 +296,11 @@ def process_dataset(dataset_name, hf_name):
     print(f"Processing {dataset_name}")
     print(f"{'='*80}\n")
 
-    base_dir = OUTPUT_ROOT / dataset_name
+    # Use correct case for SLAKE directory
+    if dataset_name == "SLAKE":
+        base_dir = OUTPUT_ROOT / "Slake"
+    else:
+        base_dir = OUTPUT_ROOT / dataset_name
 
     raw_dir = base_dir / "raw"
     central_dir = base_dir / "centralized"
