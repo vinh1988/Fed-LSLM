@@ -109,3 +109,9 @@ set -euo pipefail
 # bash federated_code/run_federated_pipeline_mrag_kd.sh --dataset VQA-RAD --setting noniid --alpha 0.5 --k 2 --model_version 2.5
 # bash federated_code/run_federated_pipeline_mrag_kd.sh --dataset VQA-RAD --setting noniid --alpha 0.5 --k 4 --model_version 2.5
 # bash federated_code/run_federated_pipeline_mrag_kd.sh --dataset VQA-RAD --setting noniid --alpha 0.5 --k 5 --model_version 2.5
+
+# ##=====alpha 1.0=====##
+# bash federated_code_smolvlm/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --model_version smolvlm500
+# bash federated_code_smolvlm/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 3 --model_version smolvlm500
+# bash federated_code_smolvlm/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 4 --model_version smolvlm500
+# bash federated_code_smolvlm/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 5 --model_version smolvlm500
