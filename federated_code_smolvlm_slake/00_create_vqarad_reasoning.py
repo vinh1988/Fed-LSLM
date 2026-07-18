@@ -57,12 +57,14 @@ def fmt_time(seconds: float) -> str:
 
 def load_vqarad_image(image_path: str, image_dir: Path) -> Image.Image | None:
     """Load image from VQA-RAD images directory"""
-    # image_path format: images/train/0000000.jpg
+    # image_path format: images/train/0000000.jpg or images\train\0000000.jpg
     # image_dir points to: processed_data/VQA-RAD/raw/images
     # So we need to construct: processed_data/VQA-RAD/raw/images/train/0000000.jpg
-    # Remove "images/" prefix if present
+    # Remove "images/" or "images\" prefix if present
     if image_path.startswith("images/"):
         image_path = image_path[7:]  # Remove "images/" prefix
+    elif image_path.startswith("images\\"):
+        image_path = image_path[7:]  # Remove "images\" prefix
     
     local_path = image_dir / image_path
     
