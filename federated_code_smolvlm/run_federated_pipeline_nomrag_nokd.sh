@@ -33,11 +33,8 @@ elif [ "$MODEL_VERSION" = "smolvlm" ]; then
     MODEL_NAME="HuggingFaceTB/SmolVLM-Instruct"
     MODEL_SHORT="SmolVLM-Instruct"
 elif [ "$MODEL_VERSION" = "smolvlm500" ]; then
-    MODEL_NAME="HuggingFaceTB/SmolVLM2-500M-Instruct"
-    MODEL_SHORT="SmolVLM2-500M-Instruct"
-else
-    MODEL_NAME="HuggingFaceTB/SmolVLM-Instruct"
-    MODEL_SHORT="SmolVLM-Instruct"
+    MODEL_NAME="HuggingFaceTB/SmolVLM-500M-Instruct"
+    MODEL_SHORT="SmolVLM-500M-Instruct"
 fi
 
 # Parse arguments

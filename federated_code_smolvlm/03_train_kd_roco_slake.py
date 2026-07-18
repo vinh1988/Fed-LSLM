@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 """
-03_train_kd_roco_slake.py
+03_train_kd_vqarad.py
 
-Continue training the FedAvg global LoRA adapter on unified reasoning dataset (ROCO + Slake).
+Continue training the FedAvg global LoRA adapter on VQA-RAD dataset.
 
 Pipeline:
-Base Qwen2.5-VL-3B
+Base SmolVLM-500M
     -> Load server/global_adapter_{mode} (from federated training)
-    -> Continue supervised LoRA training on ROCO (caption-based) + Slake (QA-based) reasoning
-    -> Save server/global_adapter_roco_slake_{mode}
+    -> Continue supervised LoRA training on VQA-RAD
+    -> Save server/global_adapter_vqarad_{mode}
 
-ROCO: Open-ended caption reasoning
-Slake: Closed-ended Yes/No question reasoning
-
-uv run federated_code/03_train_kd_roco_slake.py --mode 01_train_client_mrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+uv run federated_code_smolvlm/03_train_kd_vqarad.py --mode 01_train_client_nomrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
 """
 
 import os
@@ -89,48 +86,31 @@ def sample_gpu_memory_gb() -> float:
 # Dataset & collate
 # ──────────────────────────────────────────────────────────────────────────────
 
-class UnifiedReasoningDataset(Dataset):
-    def __init__(self, df_roco=None, df_slake=None, roco_image_root=None, slake_image_root=None):
+class VQARADDataset(Dataset):
+    def __init__(self, df_vqarad=None, vqarad_image_root=None):
         """
-        Unified dataset for ROCO (caption-based) and Slake (QA-based) reasoning.
+        VQA-RAD dataset for continued training.
         
         Args:
-            df_roco: ROCO DataFrame with columns: image_id, caption, reasoning
-            df_slake: Slake DataFrame with columns: img_id, img_name, question, answer, reasoning
-            roco_image_root: Path to ROCO images
-            slake_image_root: Path to Slake images (extracted imgs.zip)
+            df_vqarad: VQA-RAD DataFrame with columns: image_path, question, answer, question_type
+            vqarad_image_root: Path to VQA-RAD images
         """
         self.samples = []
         
-        # Add ROCO samples
-        if df_roco is not None and roco_image_root is not None:
-            df_roco = df_roco.dropna(subset=['image_id']).reset_index(drop=True)
-            for _, row in df_roco.iterrows():
-                image_id = row["image_id"]
-                numeric_id = image_id.split("_")[-1]
-                image_path = Path(roco_image_root) / f"{numeric_id}.jpg"
+        # Add VQA-RAD samples
+        if df_vqarad is not None and vqarad_image_root is not None:
+            df_vqarad = df_vqarad.dropna(subset=['image_path']).reset_index(drop=True)
+            for _, row in df_vqarad.iterrows():
+                image_path = Path(vqarad_image_root) / row["image_path"]
                 self.samples.append({
-                    "type": "roco",
-                    "image_path": image_path,
-                    "caption": row["caption"],
-                    "reasoning": row["reasoning"],
-                })
-        
-        # Add Slake samples
-        if df_slake is not None and slake_image_root is not None:
-            df_slake = df_slake.dropna(subset=['img_name']).reset_index(drop=True)
-            for _, row in df_slake.iterrows():
-                img_name = row["img_name"]
-                image_path = Path(slake_image_root) / "imgs" / img_name
-                self.samples.append({
-                    "type": "slake",
+                    "type": "vqarad",
                     "image_path": image_path,
                     "question": row["question"],
                     "answer": row["answer"],
-                    "reasoning": row["reasoning"],
+                    "question_type": row.get("question_type", "open"),
                 })
         
-        log(f"Loaded {len(self.samples)} total samples (ROCO: {sum(1 for s in self.samples if s['type']=='roco')}, Slake: {sum(1 for s in self.samples if s['type']=='slake')})")
+        log(f"Loaded {len(self.samples)} VQA-RAD samples")
 
     def __len__(self):
         return len(self.samples)
@@ -147,10 +127,9 @@ class UnifiedReasoningDataset(Dataset):
         return {
             "image": image,
             "type": sample["type"],
-            "caption": sample.get("caption", ""),
-            "question": sample.get("question", ""),
-            "answer": sample.get("answer", ""),
-            "reasoning": sample["reasoning"],
+            "question": sample["question"],
+            "answer": sample["answer"],
+            "question_type": sample["question_type"],
         }
 
 def get_collate_fn(processor):
@@ -161,32 +140,40 @@ def get_collate_fn(processor):
 
         for item in batch:
             all_images_per_sample.append([item["image"]])
-
-            system_prompt = "You are a professional radiologist."
             
-            # Build different prompts based on data type
-            if item["type"] == "roco":
-                # ROCO: Caption-based reasoning
-                user_text = (
-                    f"Medical Caption:\n{item['caption']}\n\n"
-                    f"Task:\nExplain step-by-step why this caption matches the image.\n"
-                    f"Focus only on visible evidence."
-                )
-            else:
-                # Slake: QA-based reasoning (closed-ended Yes/No)
-                user_text = (
-                    f"Question:\n{item['question']}\n\n"
-                    f"Answer:\n{item['answer']}\n\n"
-                    f"Task:\nExplain step-by-step why this answer is correct for the question.\n"
-                    f"Focus only on visible evidence in the image."
-                )
+            q_type_raw = str(item["question_type"]).lower()
+            question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
+            
+            # Build VQA-RAD prompt
+            content = []
+            content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
+            content.append({"type": "image", "image": item["image"]})
+            
+            q_text = (
+                f"\n\nQuestion:\n{item['question']}\n\n"
+                f"Question Type:\n{question_type}\n\n"
+            )
+            content.append({"type": "text", "text": q_text})
+            
+            instruction = (
+                "Instruction:\n"
+                "You must adapt your reasoning based on the question type.\n\n"
+                "- If the question is CLOSED-ENDED (Yes/No only):\n"
+                "  - The final answer MUST be \"yes\" or \"no\"\n"
+                "  - Focus primarily on the image\n\n"
+                "- If the question is OPEN-ENDED:\n"
+                "  - Use the image to provide a comprehensive answer\n"
+                "  - Provide detailed reasoning based on visual evidence\n\n"
+                "General rules:\n"
+                "- Do not output reasoning steps\n"
+                "- Output only the final answer\n\n"
+                "Answer:\n"
+            )
+            content.append({"type": "text", "text": instruction})
 
-            user_messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": [{"type": "image", "image": item["image"]}, {"type": "text", "text": user_text}]}
-            ]
+            user_messages = [{"role": "user", "content": content}]
             full_messages = user_messages + [
-                {"role": "assistant", "content": [{"type": "text", "text": str(item["reasoning"])}]}
+                {"role": "assistant", "content": [{"type": "text", "text": item["answer"]}]}
             ]
 
             user_p = processor.apply_chat_template(user_messages, tokenize=False, add_generation_prompt=True)
@@ -365,15 +352,13 @@ def main():
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolVLM-500M-Instruct",
                         help="VLM model name from HuggingFace")
-    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
     parser.add_argument("--global_adapter", type=str, default=None, help="Path to server/global_adapter (auto-generated if not provided)")
-    parser.add_argument("--roco_csv", type=str, default=None, help="Path to ROCO reasoning CSV (auto-generated if not provided)")
-    parser.add_argument("--roco_image_root", type=str, default=None, help="Path to ROCO images (auto-generated if not provided)")
-    parser.add_argument("--slake_csv", type=str, default=None, help="Path to Slake reasoning CSV (auto-generated if not provided)")
-    parser.add_argument("--slake_image_root", type=str, default=None, help="Path to Slake images (auto-generated if not provided)")
+    parser.add_argument("--vqarad_csv", type=str, default=None, help="Path to VQA-RAD train CSV (auto-generated if not provided)")
+    parser.add_argument("--vqarad_image_root", type=str, default=None, help="Path to VQA-RAD images (auto-generated if not provided)")
     parser.add_argument("--out_dir", type=str, default=None, help="Output directory (auto-generated if not provided)")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=1)
@@ -395,15 +380,11 @@ def main():
     if args.global_adapter is None:
         args.global_adapter = str(base / f"global_adapter_{args.mode}")
     if args.out_dir is None:
-        args.out_dir = str(base / f"global_adapter_roco_slake_{args.mode}")
-    if args.roco_csv is None:
-        args.roco_csv = str(data_root / "ROCO" / "roco_reasoning_train.csv")
-    if args.roco_image_root is None:
-        args.roco_image_root = str(data_root / "ROCO" / "train" / "images")
-    if args.slake_csv is None:
-        args.slake_csv = str(data_root / "Slake" / "slake_closed_reasoning.csv")
-    if args.slake_image_root is None:
-        args.slake_image_root = str(data_root / "Slake" / "images")
+        args.out_dir = str(base / f"global_adapter_vqarad_{args.mode}")
+    if args.vqarad_csv is None:
+        args.vqarad_csv = str(data_root / "VQA-RAD" / "centralized" / "train.csv")
+    if args.vqarad_image_root is None:
+        args.vqarad_image_root = str(data_root / "VQA-RAD" / "centralized")
     if args.test_csv is None:
         args.test_csv = str(data_root / "VQA-RAD" / "centralized" / "test.csv")
     if args.image_root is None:
@@ -413,10 +394,9 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    log(f"Starting unified reasoning training (ROCO + Slake)")
+    log(f"Starting VQA-RAD continued training")
     log(f"Global adapter: {args.global_adapter}")
-    log(f"ROCO CSV: {args.roco_csv}")
-    log(f"Slake CSV: {args.slake_csv}")
+    log(f"VQA-RAD CSV: {args.vqarad_csv}")
     log(f"Output directory: {out_dir}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -424,25 +404,17 @@ def main():
     log(f"Device: {device} | GPU: {gpu_static['gpu_name']} | VRAM: {gpu_static['total_vram_gb']} GB")
 
     # 1. Load Data
-    log("Loading reasoning datasets...")
+    log("Loading VQA-RAD dataset...")
     
-    # Load ROCO
-    df_roco = None
-    if args.roco_csv and Path(args.roco_csv).exists():
-        df_roco = pd.read_csv(args.roco_csv)
-        log(f"Loaded ROCO: {len(df_roco)} samples")
+    # Load VQA-RAD
+    df_vqarad = None
+    if args.vqarad_csv and Path(args.vqarad_csv).exists():
+        df_vqarad = pd.read_csv(args.vqarad_csv)
+        log(f"Loaded VQA-RAD: {len(df_vqarad)} samples")
     
-    # Load Slake
-    df_slake = None
-    if args.slake_csv and Path(args.slake_csv).exists():
-        df_slake = pd.read_csv(args.slake_csv)
-        log(f"Loaded Slake: {len(df_slake)} samples")
-    
-    train_dataset = UnifiedReasoningDataset(
-        df_roco=df_roco,
-        df_slake=df_slake,
-        roco_image_root=args.roco_image_root,
-        slake_image_root=args.slake_image_root
+    train_dataset = VQARADDataset(
+        df_vqarad=df_vqarad,
+        vqarad_image_root=args.vqarad_image_root
     )
     
     # 2. Load Processor and Base Model
@@ -454,13 +426,32 @@ def main():
 
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    if "qwen2.5" in args.model_name.lower():
-        from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+    # Skip quantization for Idefics3/SmolVLM due to compatibility issues
+    if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+        log(f"Skipping quantization for {args.model_name} (Idefics3/SmolVLM)")
+        bnb_config = None
+        if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+            from transformers import Idefics3ForConditionalGeneration as ModelClass
+        elif "qwen2.5" in args.model_name.lower():
+            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+        else:
+            from transformers import Qwen2VLForConditionalGeneration as ModelClass
     else:
-        from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        from transformers import BitsAndBytesConfig
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch_dtype,
+            bnb_4bit_use_double_quant=True
+        )
+        if "qwen2.5" in args.model_name.lower():
+            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+        else:
+            from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
     base_model = ModelClass.from_pretrained(
         args.model_name,
+        quantization_config=bnb_config,
         torch_dtype=torch_dtype,
         device_map="auto",
         cache_dir=CACHE_DIR
@@ -568,9 +559,8 @@ def main():
         json.dump(time_payload, f, indent=2)
         
     experiment_payload = {
-        "dataset": "ROCO+Slake",
-        "roco_samples": len(df_roco) if df_roco is not None else 0,
-        "slake_samples": len(df_slake) if df_slake is not None else 0,
+        "dataset": "VQA-RAD",
+        "vqarad_samples": len(df_vqarad) if df_vqarad is not None else 0,
         "total_samples": len(train_dataset),
         "epochs": args.epochs,
         "batch_size": args.batch_size,

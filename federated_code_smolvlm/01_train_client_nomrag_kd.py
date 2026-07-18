@@ -489,7 +489,7 @@ def train_single_client(args, client_id: int):
     t_start  = time.time()
     dt_start = datetime.datetime.now().isoformat()
 
-    # ── Step 1: Load Qwen2-VL + LoRA ─────────────────────────────────────────
+    # ── Step 1: Load SmolVLM + LoRA ─────────────────────────────────────────
     torch_dtype = (
         torch.bfloat16
         if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
@@ -507,13 +507,32 @@ def train_single_client(args, client_id: int):
     if processor.tokenizer.pad_token is None:
         processor.tokenizer.pad_token = processor.tokenizer.eos_token
 
-    if "qwen2.5" in args.model_name.lower():
-        from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+    # Skip quantization for Idefics3/SmolVLM due to compatibility issues
+    if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+        log(f"Skipping quantization for {args.model_name} (Idefics3/SmolVLM)")
+        bnb_config = None
+        if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+            from transformers import Idefics3ForConditionalGeneration as ModelClass
+        elif "qwen2.5" in args.model_name.lower():
+            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+        else:
+            from transformers import Qwen2VLForConditionalGeneration as ModelClass
     else:
-        from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        from transformers import BitsAndBytesConfig
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch_dtype,
+            bnb_4bit_use_double_quant=True
+        )
+        if "qwen2.5" in args.model_name.lower():
+            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+        else:
+            from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
     base_model = ModelClass.from_pretrained(
         args.model_name,
+        quantization_config=bnb_config,
         torch_dtype=torch_dtype,
         device_map="auto",
         cache_dir=CACHE_DIR,

@@ -25,7 +25,7 @@ def main():
     parser.add_argument("--k", type=int, default=2)
     parser.add_argument("--mode", type=str, default=None,
                         help="Script name suffix (e.g., icl, nonicl, icl_nokd, 01_train_client_mrag_kd). If not provided, uses this script's name.")
-    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
     args = parser.parse_args()
 

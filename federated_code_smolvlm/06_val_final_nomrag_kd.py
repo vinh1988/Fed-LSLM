@@ -189,9 +189,9 @@ def main():
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolVLM-500M-Instruct",
                         help="VLM model name from HuggingFace")
-    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
     parser.add_argument("--global_adapter_final", type=str, default=None,
                         help="Path to global adapter from step 05 (auto-generated if not provided)")
@@ -233,12 +233,30 @@ def main():
     processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=128*28*28, max_pixels=256*28*28, cache_dir=CACHE_DIR)
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    if "qwen2.5" in args.model_name.lower():
-        from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+    # Skip quantization for Idefics3/SmolVLM due to compatibility issues
+    if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+        log(f"Skipping quantization for {args.model_name} (Idefics3/SmolVLM)")
+        bnb_config = None
+        if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+            from transformers import Idefics3ForConditionalGeneration as ModelClass
+        elif "qwen2.5" in args.model_name.lower():
+            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+        else:
+            from transformers import Qwen2VLForConditionalGeneration as ModelClass
     else:
-        from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        from transformers import BitsAndBytesConfig
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch_dtype,
+            bnb_4bit_use_double_quant=True
+        )
+        if "qwen2.5" in args.model_name.lower():
+            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+        else:
+            from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
-    base_model = ModelClass.from_pretrained(args.model_name, torch_dtype=torch_dtype, device_map="auto", cache_dir=CACHE_DIR)
+    base_model = ModelClass.from_pretrained(args.model_name, quantization_config=bnb_config, torch_dtype=torch_dtype, device_map="auto", cache_dir=CACHE_DIR)
     
     log(f"Loading global adapter final: {args.global_adapter_final}...")
     model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter_final)))

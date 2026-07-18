@@ -359,12 +359,12 @@ def main():
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolVLM-500M-Instruct",
                         help="VLM model name from HuggingFace")
-    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
-    parser.add_argument("--global_adapter_roco_slake", type=str, default=None,
-                        help="Path to global adapter from ROCO/SLAKE training (auto-generated if not provided)")
+    parser.add_argument("--global_adapter_vqarad", type=str, default=None,
+                        help="Path to global adapter from VQA-RAD training (auto-generated if not provided)")
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--grad_accum", type=int, default=8)
@@ -381,13 +381,13 @@ def main():
         base = base / f"alpha_{args.alpha}"
     base = base / f"k{args.k}" / args.model_short / "server"
     
-    if args.global_adapter_roco_slake is None:
-        args.global_adapter_roco_slake = str(base / f"global_adapter_roco_slake_{args.roco_slake_mode}")
+    if args.global_adapter_vqarad is None:
+        args.global_adapter_vqarad = str(base / f"global_adapter_vqarad_{args.roco_slake_mode}")
 
     set_seed(args.seed)
     
     log("Starting VQA-RAD continued training for ALL clients...")
-    log(f"ROCO adapter: {args.global_adapter_roco_slake}")
+    log(f"VQA-RAD adapter: {args.global_adapter_vqarad}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     gpu_static = get_gpu_static_info()
@@ -402,20 +402,39 @@ def main():
 
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    if "qwen2.5" in args.model_name.lower():
-        from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+    # Skip quantization for Idefics3/SmolVLM due to compatibility issues
+    if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+        log(f"Skipping quantization for {args.model_name} (Idefics3/SmolVLM)")
+        bnb_config = None
+        if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+            from transformers import Idefics3ForConditionalGeneration as ModelClass
+        elif "qwen2.5" in args.model_name.lower():
+            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+        else:
+            from transformers import Qwen2VLForConditionalGeneration as ModelClass
     else:
-        from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        from transformers import BitsAndBytesConfig
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch_dtype,
+            bnb_4bit_use_double_quant=True
+        )
+        if "qwen2.5" in args.model_name.lower():
+            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
+        else:
+            from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
     base_model = ModelClass.from_pretrained(
         args.model_name,
+        quantization_config=bnb_config,
         torch_dtype=torch_dtype,
         device_map="auto"
     )
 
-    # 2. Load ROCO-trained Adapter (global initialization state)
-    log(f"Loading pretrained ROCO Slake adapter from {args.global_adapter_roco_slake}...")
-    model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter_roco_slake)), is_trainable=True, is_local=True)
+    # 2. Load VQA-RAD-trained Adapter (global initialization state)
+    log(f"Loading pretrained VQA-RAD adapter from {args.global_adapter_vqarad}...")
+    model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter_vqarad)), is_trainable=True, is_local=True)
     model.print_trainable_parameters()
 
     # 3. Save a deep copy of the global adapter weights
