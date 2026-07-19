@@ -77,11 +77,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, required=True,
                         help="Script name suffix from step 04 (e.g., 04_train_client_continue_mrag_kd)")
-    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--dataset", type=str, default="Slake")
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
-    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
     parser.add_argument("--clients_dir", type=str, default=None,
                         help="Path to clients directory (auto-generated if not provided)")

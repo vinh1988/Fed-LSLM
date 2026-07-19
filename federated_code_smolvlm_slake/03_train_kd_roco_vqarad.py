@@ -87,30 +87,95 @@ def sample_gpu_memory_gb() -> float:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class VQARADDataset(Dataset):
-    def __init__(self, df_vqarad=None, vqarad_image_root=None):
+    def __init__(self, df_vqarad=None, vqarad_image_root=None, reasoning_csv=None, roco_csv=None, roco_image_root=None, roco_reasoning_csv=None):
         """
-        VQA-RAD dataset for continued training.
+        VQA-RAD + ROCO dataset for continued training with reasoning KD.
         
         Args:
             df_vqarad: VQA-RAD DataFrame with columns: image_path, question, answer, question_type
             vqarad_image_root: Path to VQA-RAD images
+            reasoning_csv: Path to VQA-RAD reasoning CSV with reasoning column
+            roco_csv: Path to ROCO train CSV
+            roco_image_root: Path to ROCO images
+            roco_reasoning_csv: Path to ROCO reasoning CSV with reasoning column
         """
         self.samples = []
+        
+        # Load VQA-RAD reasoning data if provided
+        vqarad_reasoning_df = None
+        if reasoning_csv and Path(reasoning_csv).exists():
+            vqarad_reasoning_df = pd.read_csv(reasoning_csv)
+            log(f"Loaded VQA-RAD reasoning data: {len(vqarad_reasoning_df)} samples")
+        
+        # Create a mapping from (image_path, question) to reasoning for VQA-RAD
+        vqarad_reasoning_map = {}
+        if vqarad_reasoning_df is not None:
+            for _, row in vqarad_reasoning_df.iterrows():
+                key = (row['image_path'], row['question'])
+                vqarad_reasoning_map[key] = row.get('reasoning', '')
         
         # Add VQA-RAD samples
         if df_vqarad is not None and vqarad_image_root is not None:
             df_vqarad = df_vqarad.dropna(subset=['image_path']).reset_index(drop=True)
             for _, row in df_vqarad.iterrows():
                 image_path = Path(vqarad_image_root) / row["image_path"]
+                key = (row['image_path'], row['question'])
+                reasoning = vqarad_reasoning_map.get(key, '')
                 self.samples.append({
                     "type": "vqarad",
                     "image_path": image_path,
                     "question": row["question"],
                     "answer": row["answer"],
                     "question_type": row.get("question_type", "open"),
+                    "reasoning": reasoning
                 })
         
-        log(f"Loaded {len(self.samples)} VQA-RAD samples")
+        log(f"Loaded {len([s for s in self.samples if s['type'] == 'vqarad'])} VQA-RAD samples with reasoning")
+        
+        # Load ROCO reasoning data if provided
+        roco_reasoning_df = None
+        if roco_reasoning_csv and Path(roco_reasoning_csv).exists():
+            roco_reasoning_df = pd.read_csv(roco_reasoning_csv)
+            log(f"Loaded ROCO reasoning data: {len(roco_reasoning_df)} samples")
+            log(f"ROCO reasoning columns: {list(roco_reasoning_df.columns)}")
+        
+        # Create a mapping from (image_path, question) to reasoning for ROCO
+        roco_reasoning_map = {}
+        if roco_reasoning_df is not None:
+            for _, row in roco_reasoning_df.iterrows():
+                # Try different column name combinations
+                if 'image_path' in row and 'question' in row:
+                    key = (row['image_path'], row['question'])
+                elif 'image_name' in row and 'question' in row:
+                    key = (row['image_name'], row['question'])
+                elif 'question' in row:
+                    # Use only question as key if image column is missing
+                    key = row['question']
+                else:
+                    continue
+                roco_reasoning_map[key] = row.get('reasoning', '')
+        
+        # Add ROCO samples
+        if roco_csv and Path(roco_csv).exists() and roco_image_root:
+            df_roco = pd.read_csv(roco_csv)
+            df_roco = df_roco.dropna(subset=['image_path']).reset_index(drop=True)
+            for _, row in df_roco.iterrows():
+                image_path = Path(roco_image_root) / row["image_path"]
+                # Try different key combinations for reasoning lookup
+                key1 = (row['image_path'], row['question'])
+                key2 = row['question']
+                reasoning = roco_reasoning_map.get(key1, roco_reasoning_map.get(key2, ''))
+                self.samples.append({
+                    "type": "roco",
+                    "image_path": image_path,
+                    "question": row["question"],
+                    "answer": row["answer"],
+                    "question_type": row.get("question_type", "open"),
+                    "reasoning": reasoning
+                })
+        
+        log(f"Loaded {len([s for s in self.samples if s['type'] == 'roco'])} ROCO samples with reasoning")
+        log(f"Total samples: {len(self.samples)}")
 
     def __len__(self):
         return len(self.samples)
@@ -130,6 +195,7 @@ class VQARADDataset(Dataset):
             "question": sample["question"],
             "answer": sample["answer"],
             "question_type": sample["question_type"],
+            "reasoning": sample.get("reasoning", ""),
         }
 
 def get_collate_fn(processor):
@@ -144,7 +210,7 @@ def get_collate_fn(processor):
             q_type_raw = str(item["question_type"]).lower()
             question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
             
-            # Build VQA-RAD prompt
+            # Build VQA-RAD prompt with reasoning KD
             content = []
             content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
             content.append({"type": "image", "image": item["image"]})
@@ -155,17 +221,24 @@ def get_collate_fn(processor):
             )
             content.append({"type": "text", "text": q_text})
             
+            # Add reasoning if available (for KD)
+            if item.get("reasoning"):
+                reasoning_text = f"Expert Reasoning:\n{item['reasoning']}\n\n"
+                content.append({"type": "text", "text": reasoning_text})
+            
             instruction = (
                 "Instruction:\n"
                 "You must adapt your reasoning based on the question type.\n\n"
                 "- If the question is CLOSED-ENDED (Yes/No only):\n"
                 "  - The final answer MUST be \"yes\" or \"no\"\n"
-                "  - Focus primarily on the image\n\n"
+                "  - Focus primarily on the image\n"
+                "  - Use expert reasoning as guidance if provided\n\n"
                 "- If the question is OPEN-ENDED:\n"
                 "  - Use the image to provide a comprehensive answer\n"
+                "  - Use expert reasoning as guidance if provided\n"
                 "  - Provide detailed reasoning based on visual evidence\n\n"
                 "General rules:\n"
-                "- Do not output reasoning steps\n"
+                "- Do not output reasoning steps in your answer\n"
                 "- Output only the final answer\n\n"
                 "Answer:\n"
             )
@@ -346,9 +419,7 @@ def evaluate_model_zeroshot(model, processor, test_df, image_root, rouge_scr, de
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, required=True,
-                        help="Script name suffix from federated training (e.g., 01_train_client_mrag_kd)")
-    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--dataset", type=str, default="Slake")
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
@@ -359,6 +430,10 @@ def main():
     parser.add_argument("--global_adapter", type=str, default=None, help="Path to server/global_adapter (auto-generated if not provided)")
     parser.add_argument("--vqarad_csv", type=str, default=None, help="Path to VQA-RAD train CSV (auto-generated if not provided)")
     parser.add_argument("--vqarad_image_root", type=str, default=None, help="Path to VQA-RAD images (auto-generated if not provided)")
+    parser.add_argument("--reasoning_csv", type=str, default=None, help="Path to VQA-RAD reasoning CSV for KD")
+    parser.add_argument("--roco_csv", type=str, default=None, help="Path to ROCO train CSV (auto-generated if not provided)")
+    parser.add_argument("--roco_image_root", type=str, default=None, help="Path to ROCO images (auto-generated if not provided)")
+    parser.add_argument("--roco_reasoning_csv", type=str, default=None, help="Path to ROCO reasoning CSV for KD")
     parser.add_argument("--out_dir", type=str, default=None, help="Output directory (auto-generated if not provided)")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=1)
@@ -378,13 +453,21 @@ def main():
     data_root = Path("processed_data")
     
     if args.global_adapter is None:
-        args.global_adapter = str(base / f"global_adapter_{args.mode}")
+        args.global_adapter = str(base / f"global_adapter_01_train_client_mrag_kd")
     if args.out_dir is None:
-        args.out_dir = str(base / f"global_adapter_vqarad_{args.mode}")
+        args.out_dir = str(base / f"global_adapter_vqarad_kd")
     if args.vqarad_csv is None:
         args.vqarad_csv = str(data_root / "VQA-RAD" / "centralized" / "train.csv")
     if args.vqarad_image_root is None:
         args.vqarad_image_root = str(data_root / "VQA-RAD" / "centralized")
+    if args.reasoning_csv is None:
+        args.reasoning_csv = str(data_root / "VQA-RAD" / "vqarad_closed_reasoning.csv")
+    if args.roco_csv is None:
+        args.roco_csv = str(data_root / "ROCO" / "centralized" / "train.csv")
+    if args.roco_image_root is None:
+        args.roco_image_root = str(data_root / "ROCO" / "centralized")
+    if args.roco_reasoning_csv is None:
+        args.roco_reasoning_csv = str(data_root / "ROCO" / "roco_reasoning_train.csv")
     if args.test_csv is None:
         args.test_csv = str(data_root / "VQA-RAD" / "centralized" / "test.csv")
     if args.image_root is None:
@@ -404,7 +487,7 @@ def main():
     log(f"Device: {device} | GPU: {gpu_static['gpu_name']} | VRAM: {gpu_static['total_vram_gb']} GB")
 
     # 1. Load Data
-    log("Loading VQA-RAD dataset...")
+    log("Loading VQA-RAD and ROCO datasets...")
     
     # Load VQA-RAD
     df_vqarad = None
@@ -414,7 +497,11 @@ def main():
     
     train_dataset = VQARADDataset(
         df_vqarad=df_vqarad,
-        vqarad_image_root=args.vqarad_image_root
+        vqarad_image_root=args.vqarad_image_root,
+        reasoning_csv=args.reasoning_csv,
+        roco_csv=args.roco_csv,
+        roco_image_root=args.roco_image_root,
+        roco_reasoning_csv=args.roco_reasoning_csv
     )
     
     # 2. Load Processor and Base Model

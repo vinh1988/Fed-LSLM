@@ -15,7 +15,7 @@
 set -e  # Exit on error
 
 # Default arguments
-DATASET="VQA-RAD"
+DATASET="Slake"
 SETTING="noniid"
 ALPHA=0.1
 K=2
@@ -31,8 +31,8 @@ elif [ "$MODEL_VERSION" = "2.5" ]; then
     MODEL_NAME="Qwen/Qwen2.5-VL-3B-Instruct"
     MODEL_SHORT="Qwen2.5-VL-3B-Instruct"
 elif [ "$MODEL_VERSION" = "smolvlm500" ]; then
-    MODEL_NAME="HuggingFaceTB/SmolVLM2-500M-Instruct"
-    MODEL_SHORT="SmolVLM2-500M-Instruct"
+    MODEL_NAME="HuggingFaceTB/SmolVLM-500M-Instruct"
+    MODEL_SHORT="SmolVLM-500M-Instruct"
 else
     MODEL_NAME="HuggingFaceTB/SmolVLM-Instruct"
     MODEL_SHORT="SmolVLM-Instruct"
@@ -78,8 +78,8 @@ while [[ $# -gt 0 ]]; do
                 MODEL_NAME="HuggingFaceTB/SmolVLM-Instruct"
                 MODEL_SHORT="SmolVLM-Instruct"
             elif [ "$MODEL_VERSION" = "smolvlm500" ]; then
-                MODEL_NAME="HuggingFaceTB/SmolVLM2-500M-Instruct"
-                MODEL_SHORT="SmolVLM2-500M-Instruct"
+                MODEL_NAME="HuggingFaceTB/SmolVLM-500M-Instruct"
+                MODEL_SHORT="SmolVLM-500M-Instruct"
             else
                 MODEL_NAME="HuggingFaceTB/SmolVLM-Instruct"
                 MODEL_SHORT="SmolVLM-Instruct"
@@ -97,12 +97,12 @@ while [[ $# -gt 0 ]]; do
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
-            echo "  --dataset DATASET       Dataset name (default: VQA-RAD)"
+            echo "  --dataset DATASET       Dataset name (default: Slake)"
             echo "  --setting SETTING       Setting: iid or noniid (default: noniid)"
             echo "  --alpha ALPHA           Alpha for noniid (default: 0.1)"
             echo "  --k K                   Number of clients (default: 2)"
             echo "  --mode MODE              Script name suffix (default: 04_train_client_continue_mrag_kd)"
-            echo "  --roco_slake_mode MODE   ROCO+Slake adapter mode from step 03 (default: 01_train_client_mrag_kd)"
+            echo "  --roco_slake_mode MODE   ROCO+VQA-RAD adapter mode from step 03 (default: 01_train_client_mrag_kd)"
             echo "  --model_version VERSION  Model version: 2, 2.5, smolvlm, or smolvlm500 (default: smolvlm500)"
             echo "  --model_name MODEL_NAME  VLM model name from HuggingFace (auto-set by model_version by default)"
             echo "  --model_short MODEL_SHORT Short model name for directory naming (auto-set by model_version by default)"
@@ -118,7 +118,7 @@ done
 
 # Base paths
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FEDERATED_CODE="$PROJECT_ROOT/federated_code_smolvlm"
+FEDERATED_CODE="$PROJECT_ROOT/federated_code_smolvlm_slake"
 EXPERIMENTS_DIR="$PROJECT_ROOT/experiments/$DATASET/$SETTING"
 if [ "$SETTING" = "noniid" ]; then
     EXPERIMENTS_DIR="$EXPERIMENTS_DIR/alpha_$ALPHA"
@@ -227,37 +227,37 @@ STEP02_CMD="uv run $FEDERATED_CODE/02_fedavg.py --dataset $DATASET --setting $SE
 run_step "02" "Federated Averaging" "$STEP02_CMD" "$STEP02_OUTPUT"
 
 # ==============================================================================
-# STEP 03: Knowledge Distillation (ROCO + Slake)
+# STEP 03: Knowledge Distillation (VQA-RAD reasoning)
 # ==============================================================================
-STEP03_OUTPUT="$SERVER_DIR/global_adapter_roco_slake_01_train_client_mrag_kd"
-STEP03_CMD="uv run $FEDERATED_CODE/03_train_kd_roco_slake.py --mode 01_train_client_mrag_kd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
+STEP03_OUTPUT="$SERVER_DIR/global_adapter_roco_vqarad_01_train_client_mrag_kd"
+STEP03_CMD="uv run $FEDERATED_CODE/03_train_kd_roco_vqarad.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
 
-run_step "03" "Knowledge Distillation (ROCO + Slake)" "$STEP03_CMD" "$STEP03_OUTPUT"
+run_step "03" "Knowledge Distillation (VQA-RAD reasoning)" "$STEP03_CMD" "$STEP03_OUTPUT"
 
 # ==============================================================================
-# STEP 04: Continue Training on VQA-RAD
+# STEP 04: Continue Training on Slake
 # ==============================================================================
 echo "=============================================================================="
-echo "STEP 04: Continue Training on VQA-RAD"
+echo "STEP 04: Continue Training on Slake"
 echo "=============================================================================="
 
 # Check for specific client directories from step 04
 STEP04_CHECK_PATTERN="$CLIENTS_DIR/client_*_${MODE}"
 STEP04_HAS_OUTPUT=$(ls -d $STEP04_CHECK_PATTERN 2>/dev/null | wc -l)
 if [ "$STEP04_HAS_OUTPUT" -gt 0 ]; then
-    echo "[RESUME] Continue Training on VQA-RAD already completed"
+    echo "[RESUME] Continue Training on Slake already completed"
     echo "[RESUME] Found $STEP04_HAS_OUTPUT client directories matching pattern: $STEP04_CHECK_PATTERN"
-    echo "[RESUME] Skipping Continue Training on VQA-RAD (use --force to override)"
+    echo "[RESUME] Skipping Continue Training on Slake (use --force to override)"
 else
-    echo "[START] Running Continue Training on VQA-RAD"
+    echo "[START] Running Continue Training on Slake"
     echo ""
     
     cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/04_train_client_continue_mrag_kd.py --mode $MODE --roco_slake_mode $ROCO_SLAKE_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
-        echo "[SUCCESS] Continue Training on VQA-RAD completed"
+    if eval "uv run $FEDERATED_CODE/04_train_client_continue_mrag_kd.py --mode $MODE --roco_slake_mode roco_vqarad_01_train_client_mrag_kd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
+        echo "[SUCCESS] Continue Training on Slake completed"
         echo ""
     else
-        echo "[ERROR] Continue Training on VQA-RAD failed"
+        echo "[ERROR] Continue Training on Slake failed"
         echo "[ERROR] Check log: $LOG_FILE"
         exit 1
     fi

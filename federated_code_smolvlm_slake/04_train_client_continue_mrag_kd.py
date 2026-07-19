@@ -417,13 +417,13 @@ def main():
                         help="Script name suffix for this step (e.g., 04_train_client_continue_mrag_kd)")
     parser.add_argument("--roco_slake_mode", type=str, default="01_train_client_mrag_kd",
                         help="Script name suffix from step 03 for ROCO+Slake adapter (default: 01_train_client_mrag_kd)")
-    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--dataset", type=str, default="Slake")
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolVLM-500M-Instruct",
                         help="VLM model name from HuggingFace")
-    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
     parser.add_argument("--global_adapter_roco_slake", type=str, default=None,
                         help="Path to global adapter from ROCO/SLAKE training (auto-generated if not provided)")
@@ -466,7 +466,9 @@ def main():
 
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    if "qwen2.5" in args.model_name.lower():
+    if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+        from transformers import Idefics3ForConditionalGeneration as ModelClass
+    elif "qwen2.5" in args.model_name.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass
@@ -502,6 +504,7 @@ def main():
         
         train_df = pd.read_csv(client_csv)
         test_df = pd.read_csv(test_csv)
+        
         log(f"Train samples: {len(train_df)}")
         log(f"Test samples: {len(test_df)}")
         

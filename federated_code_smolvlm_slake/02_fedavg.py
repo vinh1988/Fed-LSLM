@@ -19,7 +19,7 @@ SCRIPT_NAME = Path(__file__).stem
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--dataset", type=str, default="Slake")
     parser.add_argument("--setting", type=str, default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)

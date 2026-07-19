@@ -220,22 +220,22 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, required=True,
                         help="Script name suffix from step 05 (e.g., 04_train_client_continue_mrag_kd)")
-    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--dataset", type=str, default="Slake")
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolVLM-500M-Instruct",
                         help="VLM model name from HuggingFace")
-    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
     parser.add_argument("--rag_k", type=int, default=3,
                         help="Number of retrieved cases for mRAG context")
     parser.add_argument("--global_adapter_final", type=str, default=None,
                         help="Path to global adapter from step 05 (auto-generated if not provided)")
     parser.add_argument("--test_csv", type=str, default=None,
-                        help="Path to VQA-RAD test CSV (auto-generated if not provided)")
+                        help="Path to Slake test CSV (auto-generated if not provided)")
     parser.add_argument("--image_root", type=str, default=None,
-                        help="Path to VQA-RAD images (auto-generated if not provided)")
+                        help="Path to Slake images (auto-generated if not provided)")
     parser.add_argument("--out_dir", type=str, default=None,
                         help="Output directory (auto-generated if not provided)")
     args = parser.parse_args()
@@ -250,9 +250,9 @@ def main():
     if args.global_adapter_final is None:
         args.global_adapter_final = str(base / "server" / f"global_adapter_{args.mode}")
     if args.test_csv is None:
-        args.test_csv = str(data_root / "VQA-RAD" / "centralized" / "test.csv")
+        args.test_csv = str(data_root / "Slake" / "centralized" / "test.csv")
     if args.image_root is None:
-        args.image_root = str(data_root / "VQA-RAD" / "centralized")
+        args.image_root = str(data_root / "Slake" / "centralized")
     if args.out_dir is None:
         args.out_dir = str(base / f"final_val_{args.mode}")
 
@@ -264,13 +264,16 @@ def main():
 
     test_df = pd.read_csv(args.test_csv)
     image_root = Path(args.image_root)
+    
     log(f"Test samples: {len(test_df)}")
     
     log(f"Loading processor and base model {args.model_name}...")
     processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=128*28*28, max_pixels=256*28*28, cache_dir=CACHE_DIR)
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    if "qwen2.5" in args.model_name.lower():
+    if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+        from transformers import Idefics3ForConditionalGeneration as ModelClass
+    elif "qwen2.5" in args.model_name.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass

@@ -6,10 +6,10 @@ Local-client training script for Federated Learning with mRAG (Multimodal RAG).
 
 Architecture:
   - BiomedCLIP  : frozen image+text encoder → FAISS retrieval on client's own data.
-  - Qwen2-VL-2B-Instruct + LoRA : answer generator (bfloat16, base frozen, only LoRA adapters trained).
+  - HuggingFaceTB/SmolVLM-500M-Instruct + LoRA : answer generator (bfloat16, base frozen, only LoRA adapters trained).
 
 Output structure (per Experiment Space spec):
-  experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/Qwen2-VL-2B-Instruct/clients/client_{client_id}/
+  experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/SmolVLM-500M-Instruct/clients/client_{client_id}/
        ├── adapter_config.json    # LoRA adapter config (PEFT save_pretrained)
        ├── adapter_model.safetensors # LoRA adapter weights (PEFT save_pretrained)
        ├── experiment.json        # summary metrics (avg + best across epochs)
@@ -549,6 +549,7 @@ def train_single_client(args, client_id: int):
     # ── Load CSVs ────────────────────────────────────────────────────────────
     train_df = pd.read_csv(client_csv).reset_index(drop=True)
     test_df  = pd.read_csv(test_csv).reset_index(drop=True)
+    
     log(f"Train samples (client_{client_id}): {len(train_df)}")
     log(f"Test  samples (centralized):       {len(test_df)}")
 
@@ -645,7 +646,9 @@ def train_single_client(args, client_id: int):
     if processor.tokenizer.pad_token is None:
         processor.tokenizer.pad_token = processor.tokenizer.eos_token
 
-    if "qwen2.5" in args.model_name.lower():
+    if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
+        from transformers import Idefics3ForConditionalGeneration as ModelClass
+    elif "qwen2.5" in args.model_name.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
         from transformers import Qwen2VLForConditionalGeneration as ModelClass
@@ -881,17 +884,17 @@ def main():
     )
 
     # ── Experiment identity ──────────────────────────────────────────────────
-    parser.add_argument("--dataset", type=str,   default="VQA-RAD",
-                        help="Dataset name (VQA-RAD | PathVQA)")
+    parser.add_argument("--dataset", type=str,   default="Slake",
+                        help="Dataset name (Slake | VQA-RAD | PathVQA)")
     parser.add_argument("--setting", type=str,   default="iid",
                         help="Federated setting (iid | noniid)")
     parser.add_argument("--alpha",   type=float, default=None,
                         help="Dirichlet alpha for noniid (e.g. 0.5, 0.1)")
     parser.add_argument("--k",       type=int,   default=3,
                         help="Total number of clients")
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolVLM-500M-Instruct",
                         help="VLM model name from HuggingFace")
-    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
 
     # ── RAG retrieval ────────────────────────────────────────────────────────
