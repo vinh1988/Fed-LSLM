@@ -12,7 +12,7 @@ DATA_DIR="$PROJECT_ROOT/processed_data/Slake/centralized"
 MODELS=(
     "HuggingFaceTB/SmolVLM-500M-Instruct"
 )
-RAG_TYPES=("nomrag")
+RAG_TYPES=("nomrag" "mrag")
 EPOCHS=5
 K=3
 BATCH_SIZE=1
@@ -46,15 +46,28 @@ for RAG_TYPE in "${RAG_TYPES[@]}"; do
             echo "   Set FORCE_RERUN=1 to retrain"
         else
             echo "▶ Starting training..."
-            uv run python "$SCRIPT_DIR/train_${RAG_TYPE}.py" \
-                --data_dir "$DATA_DIR" \
-                --model_name "$MODEL_NAME" \
-                --output_dir "$OUTPUT_DIR" \
-                --epochs "$EPOCHS" \
-                --batch_size "$BATCH_SIZE" \
-                --gradient_accumulation_steps "$GRAD_ACCUM" \
-                --lr "$LR" \
-                --seed 42
+            if [ "$RAG_TYPE" = "mrag" ]; then
+                uv run python "$SCRIPT_DIR/train_${RAG_TYPE}.py" \
+                    --data_dir "$DATA_DIR" \
+                    --model_name "$MODEL_NAME" \
+                    --output_dir "$OUTPUT_DIR" \
+                    --k "$K" \
+                    --epochs "$EPOCHS" \
+                    --batch_size "$BATCH_SIZE" \
+                    --gradient_accumulation_steps "$GRAD_ACCUM" \
+                    --lr "$LR" \
+                    --seed 42
+            else
+                uv run python "$SCRIPT_DIR/train_${RAG_TYPE}.py" \
+                    --data_dir "$DATA_DIR" \
+                    --model_name "$MODEL_NAME" \
+                    --output_dir "$OUTPUT_DIR" \
+                    --epochs "$EPOCHS" \
+                    --batch_size "$BATCH_SIZE" \
+                    --gradient_accumulation_steps "$GRAD_ACCUM" \
+                    --lr "$LR" \
+                    --seed 42
+            fi
             echo "✔ Training completed"
         fi
 
@@ -64,10 +77,18 @@ for RAG_TYPE in "${RAG_TYPES[@]}"; do
             echo "   Set FORCE_RERUN=1 to re-validate"
         else
             echo "▶ Starting validation..."
-            uv run python "$SCRIPT_DIR/val_${RAG_TYPE}.py" \
-                --data_dir "$DATA_DIR" \
-                --adapter_dir "$OUTPUT_DIR/best_lora_adapter" \
-                --model_name "$MODEL_NAME"
+            if [ "$RAG_TYPE" = "mrag" ]; then
+                uv run python "$SCRIPT_DIR/val_${RAG_TYPE}.py" \
+                    --data_dir "$DATA_DIR" \
+                    --adapter_dir "$OUTPUT_DIR/best_lora_adapter" \
+                    --model_name "$MODEL_NAME" \
+                    --k "$K"
+            else
+                uv run python "$SCRIPT_DIR/val_${RAG_TYPE}.py" \
+                    --data_dir "$DATA_DIR" \
+                    --adapter_dir "$OUTPUT_DIR/best_lora_adapter" \
+                    --model_name "$MODEL_NAME"
+            fi
             echo "✔ Validation completed"
         fi
 
