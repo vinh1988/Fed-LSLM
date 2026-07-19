@@ -86,7 +86,7 @@ def sample_gpu_memory_gb() -> float:
 # Dataset & collate
 # ──────────────────────────────────────────────────────────────────────────────
 
-class VQARADDataset(Dataset):
+class VQARADROCOKDDataset(Dataset):
     def __init__(self, df_vqarad=None, vqarad_image_root=None, reasoning_csv=None, roco_csv=None, roco_image_root=None, roco_reasoning_csv=None):
         """
         VQA-RAD + ROCO dataset for continued training with reasoning KD.
@@ -148,9 +148,15 @@ class VQARADDataset(Dataset):
                     key = (row['image_path'], row['question'])
                 elif 'image_name' in row and 'question' in row:
                     key = (row['image_name'], row['question'])
+                elif 'image_id' in row and 'caption' in row:
+                    # ROCO reasoning CSV uses image_id and caption
+                    key = (row['image_id'], row['caption'])
                 elif 'question' in row:
                     # Use only question as key if image column is missing
                     key = row['question']
+                elif 'caption' in row:
+                    # Use only caption as key if image column is missing
+                    key = row['caption']
                 else:
                     continue
                 roco_reasoning_map[key] = row.get('reasoning', '')
@@ -158,19 +164,23 @@ class VQARADDataset(Dataset):
         # Add ROCO samples
         if roco_csv and Path(roco_csv).exists() and roco_image_root:
             df_roco = pd.read_csv(roco_csv)
-            df_roco = df_roco.dropna(subset=['image_path']).reset_index(drop=True)
+            # ROCO CSV has columns: image_name, caption
+            # Drop rows with missing image_name
+            df_roco = df_roco.dropna(subset=['image_name']).reset_index(drop=True)
             for _, row in df_roco.iterrows():
-                image_path = Path(roco_image_root) / row["image_path"]
+                image_path = Path(roco_image_root) / row["image_name"]
+                caption = row["caption"]
                 # Try different key combinations for reasoning lookup
-                key1 = (row['image_path'], row['question'])
-                key2 = row['question']
+                # ROCO reasoning uses (image_id, caption) as key
+                key1 = (row['image_name'], caption)
+                key2 = caption
                 reasoning = roco_reasoning_map.get(key1, roco_reasoning_map.get(key2, ''))
                 self.samples.append({
                     "type": "roco",
                     "image_path": image_path,
-                    "question": row["question"],
-                    "answer": row["answer"],
-                    "question_type": row.get("question_type", "open"),
+                    "question": caption,  # Use caption as question for ROCO
+                    "answer": caption,     # Use caption as answer for ROCO
+                    "question_type": "open",
                     "reasoning": reasoning
                 })
         
@@ -465,7 +475,7 @@ def main():
     if args.reasoning_csv is None:
         args.reasoning_csv = str(data_root / "VQA-RAD" / "vqarad_closed_reasoning.csv")
     if args.roco_csv is None:
-        args.roco_csv = str(data_root / "ROCO" / "centralized" / "train.csv")
+        args.roco_csv = str(data_root / "ROCO" / "train" / "captions.csv")
     if args.roco_image_root is None:
         args.roco_image_root = str(data_root / "ROCO" / "centralized")
     if args.roco_reasoning_csv is None:
@@ -497,7 +507,7 @@ def main():
         df_vqarad = pd.read_csv(args.vqarad_csv)
         log(f"Loaded VQA-RAD: {len(df_vqarad)} samples")
     
-    train_dataset = VQARADDataset(
+    train_dataset = VQARADROCOKDDataset(
         df_vqarad=df_vqarad,
         vqarad_image_root=args.vqarad_image_root,
         reasoning_csv=args.reasoning_csv,
