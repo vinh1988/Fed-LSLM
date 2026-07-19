@@ -427,6 +427,8 @@ def main():
                         help="VLM model name from HuggingFace")
     parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
+    parser.add_argument("--mode", type=str, default="01_train_client_mrag_kd",
+                        help="Mode for adapter naming (e.g., 01_train_client_mrag_kd)")
     parser.add_argument("--global_adapter", type=str, default=None, help="Path to server/global_adapter (auto-generated if not provided)")
     parser.add_argument("--vqarad_csv", type=str, default=None, help="Path to VQA-RAD train CSV (auto-generated if not provided)")
     parser.add_argument("--vqarad_image_root", type=str, default=None, help="Path to VQA-RAD images (auto-generated if not provided)")
@@ -453,9 +455,9 @@ def main():
     data_root = Path("processed_data")
     
     if args.global_adapter is None:
-        args.global_adapter = str(base / f"global_adapter_01_train_client_mrag_kd")
+        args.global_adapter = str(base / f"global_adapter_{args.mode}")
     if args.out_dir is None:
-        args.out_dir = str(base / f"global_adapter_vqarad_kd")
+        args.out_dir = str(base / f"global_adapter_roco_vqarad_{args.mode}")
     if args.vqarad_csv is None:
         args.vqarad_csv = str(data_root / "VQA-RAD" / "centralized" / "train.csv")
     if args.vqarad_image_root is None:

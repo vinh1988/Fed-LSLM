@@ -227,10 +227,10 @@ STEP02_CMD="uv run $FEDERATED_CODE/02_fedavg.py --dataset $DATASET --setting $SE
 run_step "02" "Federated Averaging" "$STEP02_CMD" "$STEP02_OUTPUT"
 
 # ==============================================================================
-# STEP 03: Knowledge Distillation (VQA-RAD reasoning)
+# STEP 03: Knowledge Distillation (ROCO + VQA-RAD reasoning)
 # ==============================================================================
 STEP03_OUTPUT="$SERVER_DIR/global_adapter_roco_vqarad_01_train_client_mrag_kd"
-STEP03_CMD="uv run $FEDERATED_CODE/03_train_kd_roco_vqarad.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
+STEP03_CMD="uv run $FEDERATED_CODE/03_train_kd_roco_vqarad.py --mode 01_train_client_mrag_kd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
 
 run_step "03" "Knowledge Distillation (VQA-RAD reasoning)" "$STEP03_CMD" "$STEP03_OUTPUT"
 
@@ -253,7 +253,7 @@ else
     echo ""
     
     cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/04_train_client_continue_mrag_kd.py --mode $MODE --roco_slake_mode roco_vqarad_01_train_client_mrag_kd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
+    if eval "uv run $FEDERATED_CODE/04_train_client_continue_mrag_kd.py --mode $MODE --global_adapter_roco_slake $SERVER_DIR/global_adapter_roco_vqarad_01_train_client_mrag_kd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
         echo "[SUCCESS] Continue Training on Slake completed"
         echo ""
     else

@@ -155,50 +155,87 @@ class MedVQADataset(Dataset):
         q_type_raw   = str(row.get("question_type", "open")).lower()
         question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
         
+        # Load SLAKE metadata
+        body_part = row.get('body_part', '')
+        modality = row.get('modality', '')
+        objects = row.get('objects', '')
+        
         return {
             "query_image":   self._load_image(row["image_path"]),
             "question":      row["question"],
             "question_type": question_type,
             "context":       self.retrieved_contexts[idx],
-            "answer":        str(row["answer"])
+            "answer":        str(row["answer"]),
+            "body_part":     body_part,
+            "modality":      modality,
+            "objects":       objects
         }
 
 
-def build_mrag_content(query_image: Image.Image, question: str, question_type: str, context_list: list):
+def build_mrag_content(query_image: Image.Image, question: str, question_type: str, context_list: list, body_part: str = "", modality: str = "", objects: str = ""):
     """
-    Construct a Qwen2-VL mRAG prompt:
-      [query_image] + question text + context + answer prompt
+    Construct a Qwen2-VL mRAG prompt with Slake metadata:
+      [query_image] + question + medical context + retrieved context + answer prompt
     """
     content = []
     
     # 1) System and Image
-    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
+    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant specializing in medical image analysis.\n\nImage:\n"})
     content.append({"type": "image", "image": query_image})
     
     # 2) Question and Question Type
-    k = len(context_list)
     q_text = (
         f"\n\nQuestion:\n{question}\n\n"
         f"Question Type:\n{question_type}\n\n"
-        f"Retrieved Medical Evidence (Top-{k} QA cases ranked by similarity score):\n\n"
     )
     content.append({"type": "text", "text": q_text})
     
-    # 3) Retrieved text context
-    for case_text in context_list:
-        content.append({"type": "text", "text": case_text + "\n"})
+    # 3) Medical Context (from Slake metadata)
+    # Format objects summary from JSON
+    objects_summary = ""
+    if objects:
+        try:
+            import json
+            objects_list = json.loads(objects)
+            if isinstance(objects_list, list) and len(objects_list) > 0:
+                object_names = [obj.get('name', 'unknown') for obj in objects_list]
+                objects_summary = f"{len(objects_list)} objects detected: {', '.join(object_names)}"
+        except:
+            objects_summary = ""
     
-    # 4) Instruction and rules
+    context_text = (
+        "Medical Context:\n"
+        f"- Body Part: {body_part}\n"
+        f"- Modality: {modality}\n"
+    )
+    if objects_summary:
+        context_text += f"- Detected Objects: {objects_summary}\n"
+    context_text += "\n"
+    
+    content.append({"type": "text", "text": context_text})
+    
+    # 4) Retrieved Medical Evidence
+    if context_list:
+        k = len(context_list)
+        rag_text = f"Retrieved Medical Evidence (Top-{k} QA cases ranked by similarity score):\n\n"
+        content.append({"type": "text", "text": rag_text})
+        for case_text in context_list:
+            content.append({"type": "text", "text": case_text + "\n"})
+    
+    # 5) Instruction and rules
     instruction = (
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
         "- If the question is CLOSED-ENDED (Yes/No only):\n"
-        "  - The final answer MUST be \"yes\" or \"no\"\n"
-        "  - Focus primarily on the image\n"
-        "  - Use retrieved QA cases only if they strongly match the visual evidence\n\n"
+        "  • The final answer MUST be \"yes\" or \"no\"\n"
+        "  • Use the medical context and detected objects to inform your decision\n"
+        "  • Focus primarily on the image\n"
+        "  • Use retrieved QA cases only if they strongly match the visual evidence\n\n"
         "- If the question is OPEN-ENDED:\n"
-        "  - Use both the image and retrieved QA cases\n"
-        "  - Combine visual evidence with similar QA examples to improve reasoning and completeness\n\n"
+        "  • Use the image, body part, modality, and detected objects to provide an accurate answer\n"
+        "  • Consider the imaging modality when interpreting findings\n"
+        "  • Use both the image and retrieved QA cases\n"
+        "  • Combine visual evidence with similar QA examples to improve reasoning and completeness\n\n"
         "General rules:\n"
         "- Retrieved cases are ranked by similarity score (higher score = more relevant)\n"
         "- Ignore low-score or irrelevant retrieved cases\n"
@@ -222,7 +259,8 @@ def get_collate_fn(processor):
             all_images_per_sample.append(sample_images)
             
             mrag_content = build_mrag_content(
-                item["query_image"], item["question"], item["question_type"], item["context"]
+                item["query_image"], item["question"], item["question_type"], item["context"],
+                item["body_part"], item["modality"], item["objects"]
             )
             user_messages = [{"role": "user", "content": mrag_content}]
             full_messages = user_messages + [
@@ -481,7 +519,8 @@ def main():
 
     # 2. Load ROCO-trained Adapter (global initialization state)
     log(f"Loading pretrained ROCO Slake adapter from {args.global_adapter_roco_slake}...")
-    model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter_roco_slake)), is_trainable=True, is_local=True)
+    adapter_path = str(Path(args.global_adapter_roco_slake).as_posix())
+    model = PeftModel.from_pretrained(base_model, adapter_path, is_trainable=True, is_local=True)
     model.print_trainable_parameters()
 
     # 3. Save a deep copy of the global adapter weights
