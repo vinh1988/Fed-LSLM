@@ -139,27 +139,14 @@ class VQARADROCOKDDataset(Dataset):
             log(f"Loaded ROCO reasoning data: {len(roco_reasoning_df)} samples")
             log(f"ROCO reasoning columns: {list(roco_reasoning_df.columns)}")
         
-        # Create a mapping from (image_path, question) to reasoning for ROCO
+        # Create a mapping from image_name to reasoning for ROCO
         roco_reasoning_map = {}
         if roco_reasoning_df is not None:
             for _, row in roco_reasoning_df.iterrows():
-                # Try different column name combinations
-                if 'image_path' in row and 'question' in row:
-                    key = (row['image_path'], row['question'])
-                elif 'image_name' in row and 'question' in row:
-                    key = (row['image_name'], row['question'])
-                elif 'image_id' in row and 'caption' in row:
-                    # ROCO reasoning CSV uses image_id and caption
-                    key = (row['image_id'], row['caption'])
-                elif 'question' in row:
-                    # Use only question as key if image column is missing
-                    key = row['question']
-                elif 'caption' in row:
-                    # Use only caption as key if image column is missing
-                    key = row['caption']
-                else:
-                    continue
-                roco_reasoning_map[key] = row.get('reasoning', '')
+                # Fixed CSV has image_name column with filename format
+                if 'image_name' in row and pd.notna(row['image_name']):
+                    key = row['image_name']
+                    roco_reasoning_map[key] = row.get('reasoning', '')
         
         # Add ROCO samples
         if roco_csv and Path(roco_csv).exists() and roco_image_root:
@@ -170,19 +157,19 @@ class VQARADROCOKDDataset(Dataset):
             for _, row in df_roco.iterrows():
                 image_path = Path(roco_image_root) / row["image_name"]
                 caption = row["caption"]
-                # Try different key combinations for reasoning lookup
-                # ROCO reasoning uses (image_id, caption) as key
-                key1 = (row['image_name'], caption)
-                key2 = caption
-                reasoning = roco_reasoning_map.get(key1, roco_reasoning_map.get(key2, ''))
-                self.samples.append({
-                    "type": "roco",
-                    "image_path": image_path,
-                    "question": caption,  # Use caption as question for ROCO
-                    "answer": caption,     # Use caption as answer for ROCO
-                    "question_type": "open",
-                    "reasoning": reasoning
-                })
+                # Match by image_name only
+                key = row['image_name']
+                reasoning = roco_reasoning_map.get(key, '')
+                # Only add samples that have reasoning
+                if reasoning:
+                    self.samples.append({
+                        "type": "roco",
+                        "image_path": image_path,
+                        "question": caption,  # Use caption as question for ROCO
+                        "answer": caption,     # Use caption as answer for ROCO
+                        "question_type": "open",
+                        "reasoning": reasoning
+                    })
         
         log(f"Loaded {len([s for s in self.samples if s['type'] == 'roco'])} ROCO samples with reasoning")
         log(f"Total samples: {len(self.samples)}")
@@ -477,9 +464,9 @@ def main():
     if args.roco_csv is None:
         args.roco_csv = str(data_root / "ROCO" / "train" / "captions.csv")
     if args.roco_image_root is None:
-        args.roco_image_root = str(data_root / "ROCO" / "centralized")
+        args.roco_image_root = str(data_root / "ROCO" / "train")
     if args.roco_reasoning_csv is None:
-        args.roco_reasoning_csv = str(data_root / "ROCO" / "roco_reasoning_train.csv")
+        args.roco_reasoning_csv = str(data_root / "ROCO" / "roco_reasoning_train_fixed.csv")
     if args.test_csv is None:
         args.test_csv = str(data_root / "VQA-RAD" / "centralized" / "test.csv")
     if args.image_root is None:
