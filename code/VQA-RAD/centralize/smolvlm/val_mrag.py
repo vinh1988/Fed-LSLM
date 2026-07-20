@@ -13,8 +13,13 @@ import time
 import argparse
 import random
 import gc
+import warnings
 from pathlib import Path
 import re as _re
+
+# Suppress transformers warnings
+warnings.filterwarnings("ignore", message=".*Kwargs passed to.*")
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 # ── Windows DLL fix: import numpy/pandas BEFORE torch ──────────────────────
 import numpy as np
@@ -138,8 +143,40 @@ def format_retrieved_knowledge(df, indices, scores=None):
     return docs
 
 # ── Metrics ──────────────────────────────────────────────────────────────────
-def compute_exact_match(prediction, ground_truth):
-    return 1.0 if prediction.strip().lower() == ground_truth.strip().lower() else 0.0
+def _normalize(text: str) -> str:
+    if not text or (isinstance(text, float) and np.isnan(text)): return ""
+    text = str(text).lower().strip()
+    text = _re.sub(r"[^\w\s]", "", text)
+    text = _re.sub(r"\s+", " ", text).strip()
+    return text
+
+def compute_exact_match(pred: str, gt: str) -> float:
+    return 1.0 if _normalize(pred) == _normalize(gt) else 0.0
+
+def compute_flexible_match(pred: str, gt: str) -> float:
+    """
+    More flexible matching for open-ended questions.
+    Returns 1.0 if:
+    - Exact match after normalization
+    - Prediction is a substring of ground truth (e.g., "intestine" matches "the small intestines")
+    - Ground truth is a substring of prediction (e.g., "the small intestines" matches "intestines")
+    """
+    norm_pred = _normalize(pred)
+    norm_gt = _normalize(gt)
+    
+    # Exact match
+    if norm_pred == norm_gt:
+        return 1.0
+    
+    # Check if prediction is substring of ground truth
+    if norm_pred in norm_gt:
+        return 1.0
+    
+    # Check if ground truth is substring of prediction
+    if norm_gt in norm_pred:
+        return 1.0
+    
+    return 0.0
 
 def compute_bleu(prediction, ground_truth):
     ref = [ground_truth.strip().lower().split()]
@@ -203,7 +240,7 @@ def main():
                         help="Path to centralized dataset folder")
     parser.add_argument("--adapter_dir", type=str, default=None,
                         help="Path to centralized adapter directory")
-    parser.add_argument("--model_name", type=str, default="HuggingFaceM4/SmolVLM-500M",
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolVLM-500M-Instruct",
                         help="Base VLM model path/name on HF")
     parser.add_argument("--train_csv", type=str, default=None,
                         help="Path to VQA-RAD train CSV")
@@ -306,7 +343,7 @@ def main():
     processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=128*28*28, max_pixels=256*28*28, cache_dir=CACHE_DIR)
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    from transformers import AutoModelForVision2Seq as ModelClass
+    from transformers import AutoModelForImageTextToText as ModelClass, AutoConfig
 
     # 4-bit quantization to drastically reduce memory footprint
     bnb_config = BitsAndBytesConfig(
@@ -316,13 +353,22 @@ def main():
         bnb_4bit_use_double_quant=True
     )
 
+    # Load config first to fix pad_token_id before model loading
+    config = AutoConfig.from_pretrained(args.model_name, cache_dir=CACHE_DIR)
+    config.pad_token_id = processor.tokenizer.pad_token_id
+
     base_model = ModelClass.from_pretrained(
         args.model_name,
+        config=config,
         quantization_config=bnb_config,
         torch_dtype=torch_dtype,
         device_map="auto",
         cache_dir=CACHE_DIR
     )
+    
+    # Ensure pad_token_id is set correctly
+    base_model.config.pad_token_id = processor.tokenizer.pad_token_id
+    base_model.generation_config.pad_token_id = processor.tokenizer.pad_token_id
     
     log(f"Loading adapter: {args.adapter_dir}...")
     model = PeftModel.from_pretrained(base_model, args.adapter_dir)
@@ -397,8 +443,8 @@ def main():
 
     # Open metrics
     log("Computing open-ended metrics...")
-    o_acc = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
-    o_em = o_acc
+    o_acc = float(np.mean([compute_flexible_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
+    o_em = float(np.mean([compute_exact_match(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_bleu = float(np.mean([compute_bleu(p, g) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_rouge = float(np.mean([compute_rouge_l(p, g, rouge_scr) for p, g in zip(open_preds, open_gts)])) if open_preds else 0.0
     o_bert = compute_bert_score(open_preds, open_gts) if open_preds else 0.0

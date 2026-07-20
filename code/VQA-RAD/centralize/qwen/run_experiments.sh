@@ -11,10 +11,10 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 DATA_DIR="$PROJECT_ROOT/processed_data/VQA-RAD/centralized"
 MODELS=(
     "Qwen/Qwen2-VL-2B-Instruct"
-    "Qwen/Qwen2.5-VL-3B-Instruct"
+    # "Qwen/Qwen2.5-VL-3B-Instruct"
 )
 RAG_TYPES=("mrag" "nomrag")
-EPOCHS=5
+EPOCHS=1
 K=3
 BATCH_SIZE=1
 GRAD_ACCUM=8
