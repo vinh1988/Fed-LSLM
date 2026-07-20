@@ -353,7 +353,8 @@ def main():
     )
     
     log(f"Loading adapter: {args.adapter_dir}...")
-    model = PeftModel.from_pretrained(base_model, args.adapter_dir)
+    adapter_path = str(Path(args.adapter_dir).as_posix())
+    model = PeftModel.from_pretrained(base_model, adapter_path, is_local=True)
     model.eval()
 
     rouge_scr = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)

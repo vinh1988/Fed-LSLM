@@ -179,7 +179,9 @@ def main():
                         help="Path to centralized dataset folder")
     parser.add_argument("--adapter_dir", type=str, default=None,
                         help="Path to centralized adapter directory")
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+    # parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+    #                     help="Base VLM model path/name on HF")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2-VL-2B-Instruct",
                         help="Base VLM model path/name on HF")
     parser.add_argument("--train_csv", type=str, default=None,
                         help="Path to VQA-RAD train CSV")
@@ -208,7 +210,7 @@ def main():
         setting = "centralized"
     
     if args.adapter_dir is None:
-        args.adapter_dir = str(PROJECT_ROOT / "experiments" / dataset / setting / model_short / "nomrag")
+        args.adapter_dir = str(PROJECT_ROOT / "experiments" / dataset / setting / model_short / "nomrag" / "best_lora_adapter")
     if args.train_csv is None:
         args.train_csv = str(data_path / "train.csv")
     if args.test_csv is None:
@@ -247,7 +249,8 @@ def main():
     )
     
     log(f"Loading adapter: {args.adapter_dir}...")
-    model = PeftModel.from_pretrained(base_model, args.adapter_dir)
+    adapter_path = str(Path(args.adapter_dir).as_posix())
+    model = PeftModel.from_pretrained(base_model, adapter_path, is_local=True)
     model.eval()
 
     rouge_scr = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
