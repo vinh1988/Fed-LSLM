@@ -9,15 +9,30 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 # Configuration
 DATA_DIR="$PROJECT_ROOT/processed_data/VQA-RAD/centralized"
-MODELS=(
-    "HuggingFaceM4/SmolVLM-500M"
+ALL_MODELS=(
+    "HuggingFaceTB/SmolVLM-500M-Instruct"
+    # "HuggingFaceTB/SmolVLM2-500M-Instruct"
 )
-RAG_TYPES=("mrag" "nomrag")
+ALL_RAG_TYPES=("mrag" "nomrag")
 EPOCHS=5
 K=3
 BATCH_SIZE=1
 GRAD_ACCUM=8
 LR=2e-4
+
+# Optional: run only specific model
+if [ -n "$1" ]; then
+    MODELS=("$1")
+else
+    MODELS=("${ALL_MODELS[@]}")
+fi
+
+# Optional: run only specific RAG type
+if [ -n "$2" ]; then
+    RAG_TYPES=("$2")
+else
+    RAG_TYPES=("${ALL_RAG_TYPES[@]}")
+fi
 
 echo "=========================================="
 echo "mRAG & NoRAG Experiments for SmolVLM"
@@ -46,16 +61,28 @@ for RAG_TYPE in "${RAG_TYPES[@]}"; do
             echo "   Set FORCE_RERUN=1 to retrain"
         else
             echo "▶ Starting training..."
-            uv run python "$SCRIPT_DIR/train_${RAG_TYPE}.py" \
-                --data_dir "$DATA_DIR" \
-                --model_name "$MODEL_NAME" \
-                --output_dir "$OUTPUT_DIR" \
-                --epochs "$EPOCHS" \
-                --batch_size "$BATCH_SIZE" \
-                --gradient_accumulation_steps "$GRAD_ACCUM" \
-                --lr "$LR" \
-                --seed 42 \
-                --k "$K"
+            if [ "$RAG_TYPE" = "nomrag" ]; then
+                uv run python "$SCRIPT_DIR/train_${RAG_TYPE}.py" \
+                    --data_dir "$DATA_DIR" \
+                    --model_name "$MODEL_NAME" \
+                    --output_dir "$OUTPUT_DIR" \
+                    --epochs "$EPOCHS" \
+                    --batch_size "$BATCH_SIZE" \
+                    --gradient_accumulation_steps "$GRAD_ACCUM" \
+                    --lr "$LR" \
+                    --seed 42
+            else
+                uv run python "$SCRIPT_DIR/train_${RAG_TYPE}.py" \
+                    --data_dir "$DATA_DIR" \
+                    --model_name "$MODEL_NAME" \
+                    --output_dir "$OUTPUT_DIR" \
+                    --epochs "$EPOCHS" \
+                    --batch_size "$BATCH_SIZE" \
+                    --gradient_accumulation_steps "$GRAD_ACCUM" \
+                    --lr "$LR" \
+                    --seed 42 \
+                    --k "$K"
+            fi
             echo "✔ Training completed"
         fi
 
@@ -65,11 +92,18 @@ for RAG_TYPE in "${RAG_TYPES[@]}"; do
             echo "   Set FORCE_RERUN=1 to re-validate"
         else
             echo "▶ Starting validation..."
-            uv run python "$SCRIPT_DIR/val_${RAG_TYPE}.py" \
-                --data_dir "$DATA_DIR" \
-                --adapter_dir "$OUTPUT_DIR/best_lora_adapter" \
-                --model_name "$MODEL_NAME" \
-                --k_examples "$K"
+            if [ "$RAG_TYPE" = "nomrag" ]; then
+                uv run python "$SCRIPT_DIR/val_${RAG_TYPE}.py" \
+                    --data_dir "$DATA_DIR" \
+                    --adapter_dir "$OUTPUT_DIR/best_lora_adapter" \
+                    --model_name "$MODEL_NAME"
+            else
+                uv run python "$SCRIPT_DIR/val_${RAG_TYPE}.py" \
+                    --data_dir "$DATA_DIR" \
+                    --adapter_dir "$OUTPUT_DIR/best_lora_adapter" \
+                    --model_name "$MODEL_NAME" \
+                    --k_examples "$K"
+            fi
             echo "✔ Validation completed"
         fi
 
@@ -92,3 +126,19 @@ for RAG_TYPE in "${RAG_TYPES[@]}"; do
         fi
     done
 done
+
+# Usage examples:
+# uv run code/VQA-RAD/centralize/smolvlm/run_experiments.sh
+# uv run code/VQA-RAD/centralize/smolvlm/run_experiments.sh "HuggingFaceTB/SmolVLM2-500M-Instruct"
+# uv run code/VQA-RAD/centralize/smolvlm/run_experiments.sh "HuggingFaceTB/SmolVLM2-500M-Instruct" "mrag"
+# uv run code/VQA-RAD/centralize/smolvlm/run_experiments.sh "HuggingFaceTB/SmolVLM2-500M-Instruct" "nomrag"
+
+# # Run all models with both RAG types
+# uv run code/VQA-RAD/centralize/smolvlm/run_experiments.sh
+
+# # Run specific model with both RAG types
+# uv run code/VQA-RAD/centralize/smolvlm/run_experiments.sh "HuggingFaceTB/SmolVLM2-500M-Instruct"
+
+# # Run specific model with specific RAG type
+# uv run code/VQA-RAD/centralize/smolvlm/run_experiments.sh "HuggingFaceTB/SmolVLM2-500M-Instruct" "mrag"
+# uv run code/VQA-RAD/centralize/smolvlm/run_experiments.sh "HuggingFaceTB/SmolVLM2-500M-Instruct" "nomrag"

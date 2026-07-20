@@ -18,6 +18,13 @@ import os
 import gc
 import argparse
 import random
+import time
+import warnings
+
+# Suppress transformers warnings
+warnings.filterwarnings("ignore", message=".*Kwargs passed to.*")
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+
 import torch
 from torch.utils.data import Dataset, DataLoader
 import faiss
@@ -351,7 +358,7 @@ def main():
     parser.add_argument("--data_dir", type=str, 
                         default=os.path.join(PROJECT_ROOT, "processed_data", "VQA-RAD", "centralized"),
                         help="Path to centralized VQA-RAD dataset folder")
-    parser.add_argument("--model_name", type=str, default="HuggingFaceM4/SmolVLM-500M",
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolVLM-500M-Instruct",
                         help="Generator VLM model path/name on HF")
     parser.add_argument("--biomed_model_name", type=str, default="hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224",
                         help="BiomedCLIP model checkpoint")
@@ -512,15 +519,24 @@ def main():
         bnb_4bit_use_double_quant=True
     )
 
-    from transformers import AutoModelForVision2Seq as ModelClass
+    from transformers import AutoModelForImageTextToText as ModelClass, AutoConfig
+
+    # Load config first to fix pad_token_id before model loading
+    config = AutoConfig.from_pretrained(args.model_name, cache_dir=CACHE_DIR)
+    config.pad_token_id = processor.tokenizer.pad_token_id
 
     base_model = ModelClass.from_pretrained(
         args.model_name,
+        config=config,
         quantization_config=bnb_config,
         torch_dtype=torch_dtype,
         device_map="auto",
         cache_dir=CACHE_DIR
     )
+    
+    # Ensure pad_token_id is set correctly
+    base_model.config.pad_token_id = processor.tokenizer.pad_token_id
+    base_model.generation_config.pad_token_id = processor.tokenizer.pad_token_id
     
     # Enable gradient checkpointing to trade compute for memory
     base_model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -566,15 +582,25 @@ def main():
     
     log("Starting training...")
     best_em = -1.0
+    epoch_times = []
+    epoch_vram_usage = []
     
     for epoch in range(1, args.epochs + 1):
         model.train()
         epoch_loss = 0.0
         optimizer.zero_grad()
         
+        epoch_start_time = time.time()
+        vram_samples = []
+        
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch}/{args.epochs}")
         for step, batch in enumerate(progress_bar):
             batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+            
+            # Track VRAM usage
+            if torch.cuda.is_available():
+                vram_allocated = torch.cuda.memory_allocated() / (1024**3)  # GB
+                vram_samples.append(vram_allocated)
             
             outputs = model(**batch)
             
@@ -593,29 +619,34 @@ def main():
                 
             progress_bar.set_postfix({"loss": f"{loss.item() * args.gradient_accumulation_steps:.4f}"})
             
+        epoch_time = time.time() - epoch_start_time
+        epoch_times.append(epoch_time)
+        
+        avg_vram = sum(vram_samples) / len(vram_samples) if vram_samples else 0.0
+        epoch_vram_usage.append(avg_vram)
+        
         avg_loss = epoch_loss / len(train_loader)
-        log(f"Epoch {epoch} finished. Average Loss: {avg_loss:.4f}")
+        log(f"Epoch {epoch} finished. Average Loss: {avg_loss:.4f}, Time: {epoch_time:.2f}s, Avg VRAM: {avg_vram:.2f}GB")
         
-        # Evaluate model after each epoch
-        metrics, predictions = evaluate_model(model, processor, test_df, test_contexts, test_retrieved_img_paths, data_dir, scorer, device, desc="Test")
-        log(f"Epoch {epoch} Eval Metrics: EM={metrics['EM']:.4f}, F1={metrics['F1']:.4f}, BLEU={metrics['BLEU']:.4f}, ROUGE-L={metrics['ROUGE-L']:.4f}")
+        # Validation disabled - save model after each epoch
+        log(f"Saving adapter weights for epoch {epoch}...")
+        model.save_pretrained(output_dir / "best_lora_adapter")
         
-        # Save best model
-        if metrics['EM'] > best_em:
-            best_em = metrics['EM']
-            log(f"New best Exact Match: {best_em:.4f}. Saving adapter weights...")
-            model.save_pretrained(output_dir / "best_lora_adapter")
-            
-            # Save predictions
-            results_df = test_df.copy()
-            results_df['retrieved_knowledge'] = ["\n".join(ctx) for ctx in test_contexts]
-            results_df['prediction'] = predictions
-            results_df['EM'] = [compute_exact_match(p, r.answer) for p, r in zip(predictions, test_df.itertuples())]
-            results_df['F1'] = [compute_f1(p, r.answer) for p, r in zip(predictions, test_df.itertuples())]
-            results_df['BLEU'] = [compute_bleu(p, r.answer) for p, r in zip(predictions, test_df.itertuples())]
-            results_df['ROUGE-L'] = [compute_rouge_l(p, r.answer, scorer) for p, r in zip(predictions, test_df.itertuples())]
-            results_df.to_csv(output_dir / "best_predictions.csv", index=False)
-            log(f"Saved predictions and scores to {output_dir / 'best_predictions.csv'}")
+        # Save training performance metrics
+        avg_epoch_time = sum(epoch_times) / len(epoch_times) if epoch_times else 0.0
+        avg_vram = sum(epoch_vram_usage) / len(epoch_vram_usage) if epoch_vram_usage else 0.0
+        
+        training_metrics = {
+            "avg_epoch_time_s": avg_epoch_time,
+            "avg_allocated_vram_gb": avg_vram,
+            "epoch_times": epoch_times,
+            "epoch_vram_usage_gb": epoch_vram_usage
+        }
+        
+        import json
+        with open(output_dir / "best_lora_adapter" / "training_performance.json", "w") as f:
+            json.dump(training_metrics, f, indent=2)
+        log(f"Saved training performance metrics to {output_dir / 'best_lora_adapter' / 'training_performance.json'}")
 
     log("Training completed successfully!")
 
