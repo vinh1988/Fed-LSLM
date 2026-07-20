@@ -155,7 +155,7 @@ class VQARADROCOKDDataset(Dataset):
             # Drop rows with missing image_name
             df_roco = df_roco.dropna(subset=['image_name']).reset_index(drop=True)
             for _, row in df_roco.iterrows():
-                image_path = Path(roco_image_root) / row["image_name"]
+                image_path = Path(roco_image_root) / "images" / row["image_name"]
                 caption = row["caption"]
                 # Match by image_name only
                 key = row['image_name']
@@ -601,28 +601,14 @@ def main():
 
         log(f"Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
     
-    # 6. Evaluate Zero-Shot on VQA-RAD
-    log("Running zero-shot evaluation on VQA-RAD test set...")
-    test_df = pd.read_csv(args.test_csv)
-    rouge_scr = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
-    best_metrics = evaluate_model_zeroshot(
-        model=model,
-        processor=processor,
-        test_df=test_df,
-        image_root=Path(args.image_root),
-        rouge_scr=rouge_scr,
-        device=device
-    )
-    log(f"Evaluation finished: {best_metrics}")
-
-    # 7. Save Updated Adapter
+    # 6. Save Updated Adapter
     log(f"Training finished. Saving updated adapter to {out_dir}")
     model.save_pretrained(out_dir)
 
     t_end = time.time()
     total_s = t_end - t_start
 
-    # 8. Save Artifacts
+    # 7. Save Artifacts
     avg_vram = float(np.mean(gpu_mem_readings_gb)) if gpu_mem_readings_gb else 0.0
     peak_vram = float(max(gpu_mem_readings_gb)) if gpu_mem_readings_gb else 0.0
     hardware_payload = {
@@ -652,7 +638,6 @@ def main():
         "batch_size": args.batch_size,
         "lr": args.lr,
         "avg_train_loss": round(float(np.mean(all_losses)), 4),
-        "best_metrics": best_metrics
     }
     with open(out_dir / "experiment.json", "w") as f:
         json.dump(experiment_payload, f, indent=2)

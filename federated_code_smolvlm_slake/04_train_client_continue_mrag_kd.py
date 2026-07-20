@@ -617,9 +617,6 @@ def main():
         all_losses = []
         epoch_times = []
         gpu_mem_readings_gb = []
-        
-        best_closed_acc = -1.0
-        best_epoch = -1
 
         t_start = time.time()
         dt_start = datetime.datetime.now().isoformat()
@@ -654,16 +651,6 @@ def main():
             gpu_mem_readings_gb.append(sample_gpu_memory_gb())
 
             log(f"[Client {client_id}] Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
-            
-            # Eval at end of epoch
-            metrics = evaluate_model(model, processor, test_df, test_contexts, Path(image_root), rouge_scr, device, desc=f"Eval Epoch {epoch}")
-            log(f"[Client {client_id}] Epoch {epoch} | Closed Acc={metrics['closed-ended']['Accuracy']:.4f} | Open ROUGE-L={metrics['open-ended']['ROUGE-L']:.4f}")
-            
-            if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
-                best_closed_acc = metrics["closed-ended"]["Accuracy"]
-                best_epoch = epoch
-                log(f"[Client {client_id}] New best Closed Acc = {best_closed_acc:.4f}. Saving best adapter...")
-                model.save_pretrained(out_dir)
 
         t_end = time.time()
         total_s = t_end - t_start
@@ -700,14 +687,6 @@ def main():
             "lr": args.lr,
             "rag_k": args.rag_k,
             "avg_train_loss": round(float(np.mean(all_losses)), 4),
-            "best_closed_acc": round(best_closed_acc, 4),
-            "best_epoch": best_epoch,
-            "best_metrics": {
-                "closed-ended": {"Accuracy": round(best_closed_acc, 4)},
-                "open-ended": {"Accuracy": 0.0, "BLEU": 0.0, "ROUGE-L": 0.0, "BERTScore": 0.0},
-                "hallucination": {"Hallucination Rate": 0.0},
-                "performance": {"inference_time_s": 0.0, "throughput_samples_per_sec": 0.0}
-            }
         }
         with open(out_dir / "experiment.json", "w") as f:
             json.dump(experiment_payload, f, indent=2)
