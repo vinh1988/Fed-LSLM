@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-train_local_client.py
+01_train_client_nomrag_kd.py
 
-Local-client training script for Federated Learning without RAG (No-RAG with KD).
+Local-client training script for Federated Learning WITHOUT RAG (No-RAG).
 
 Architecture:
-  - Qwen2-VL-2B-Instruct + LoRA : answer generator (bfloat16, base frozen, only LoRA adapters trained).
-  - No retrieval augmentation (no BiomedCLIP, no FAISS).
+  - HuggingFaceTB/SmolVLM-500M-Instruct + LoRA : answer generator (bfloat16, base frozen, only LoRA adapters trained).
+  - No retrieval (no BiomedCLIP, no FAISS)
+  - Uses Slake metadata (body_part, modality, objects) in prompts
 
 Output structure (per Experiment Space spec):
-  experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/Qwen2-VL-2B-Instruct/clients/client_{client_id}/
+  experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/SmolVLM-500M-Instruct/clients/client_{client_id}/
        ├── adapter_config.json    # LoRA adapter config (PEFT save_pretrained)
        ├── adapter_model.safetensors # LoRA adapter weights (PEFT save_pretrained)
        ├── experiment.json        # summary metrics (avg + best across epochs)
@@ -27,7 +28,8 @@ Windows note: numpy & pandas MUST be imported before torch to avoid DLL conflict
 # client_i/adapter
 
 # # Non-IID α=0.1, k=2 → tự chạy client_1, client_2
-# uv run federated_code/01_train_client_nomrag_kd.py --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+# uv run federated_code/01_train_client_mrag_kd.py --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+# uv run federated_code/01_train_client_nonicl.py --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
 
 
 # ── Windows DLL fix: import numpy/pandas BEFORE torch ──────────────────────
@@ -153,7 +155,12 @@ def sample_gpu_memory_gb() -> float:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Prompt building (no RAG)
+# No RAG - No retrieval components needed
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# No RAG - No retrieval components needed
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -162,9 +169,10 @@ def sample_gpu_memory_gb() -> float:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class MedVQADataset(Dataset):
-    def __init__(self, df: pd.DataFrame, image_root: Path):
+    def __init__(self, df: pd.DataFrame, image_root: Path, max_length: int = 512):
         self.df = df.reset_index(drop=True)
         self.image_root = image_root
+        self.max_length = max_length
 
     def __len__(self):
         return len(self.df)
@@ -182,23 +190,31 @@ class MedVQADataset(Dataset):
         q_type_raw   = str(row.get("question_type", "open")).lower()
         question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
         
+        # Load SLAKE metadata
+        body_part = row.get('body_part', '')
+        modality = row.get('modality', '')
+        objects = row.get('objects', '')
+        
         return {
             "query_image":   self._load_image(row["image_path"]),
             "question":      row["question"],
             "question_type": question_type,
-            "answer":        str(row["answer"])
+            "answer":        str(row["answer"]),
+            "body_part":     body_part,
+            "modality":      modality,
+            "objects":       objects
         }
 
 
-def build_prompt_content(query_image: Image.Image, question: str, question_type: str):
+def build_content(query_image: Image.Image, question: str, question_type: str, body_part: str = "", modality: str = "", objects: str = ""):
     """
-    Construct a Qwen2-VL prompt without RAG:
-      [query_image] + question text + answer prompt
+    Construct a Qwen2-VL prompt with Slake metadata (No-RAG):
+      [query_image] + question + medical context + answer prompt
     """
     content = []
     
     # 1) System and Image
-    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
+    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant specializing in medical image analysis.\n\nImage:\n"})
     content.append({"type": "image", "image": query_image})
     
     # 2) Question and Question Type
@@ -208,16 +224,41 @@ def build_prompt_content(query_image: Image.Image, question: str, question_type:
     )
     content.append({"type": "text", "text": q_text})
     
-    # 3) Instruction and rules
+    # 3) Medical Context (from Slake metadata)
+    # Format objects summary from JSON
+    objects_summary = ""
+    if objects:
+        try:
+            import json
+            objects_list = json.loads(objects)
+            if isinstance(objects_list, list) and len(objects_list) > 0:
+                object_names = [obj.get('name', 'unknown') for obj in objects_list]
+                objects_summary = f"{len(objects_list)} objects detected: {', '.join(object_names)}"
+        except:
+            objects_summary = ""
+    
+    context_text = (
+        "Medical Context:\n"
+        f"- Body Part: {body_part}\n"
+        f"- Modality: {modality}\n"
+    )
+    if objects_summary:
+        context_text += f"- Detected Objects: {objects_summary}\n"
+    context_text += "\n"
+    
+    content.append({"type": "text", "text": context_text})
+    
+    # 4) Instruction and rules
     instruction = (
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
         "- If the question is CLOSED-ENDED (Yes/No only):\n"
-        "  - The final answer MUST be \"yes\" or \"no\"\n"
-        "  - Focus primarily on the image\n\n"
+        "  • The final answer MUST be \"yes\" or \"no\"\n"
+        "  • Use the medical context and detected objects to inform your decision\n"
+        "  • Focus primarily on the image\n\n"
         "- If the question is OPEN-ENDED:\n"
-        "  - Use the image to provide a comprehensive answer\n"
-        "  - Provide detailed reasoning based on visual evidence\n\n"
+        "  • Use the image, body part, modality, and detected objects to provide an accurate answer\n"
+        "  • Consider the imaging modality when interpreting findings\n\n"
         "General rules:\n"
         "- Do not output reasoning steps\n"
         "- Output only the final answer\n\n"
@@ -238,10 +279,11 @@ def get_collate_fn(processor):
             sample_images = [item["query_image"]]
             all_images_per_sample.append(sample_images)
             
-            prompt_content = build_prompt_content(
-                item["query_image"], item["question"], item["question_type"]
+            content = build_content(
+                item["query_image"], item["question"], item["question_type"],
+                item["body_part"], item["modality"], item["objects"]
             )
-            user_messages = [{"role": "user", "content": prompt_content}]
+            user_messages = [{"role": "user", "content": content}]
             full_messages = user_messages + [
                 {"role": "assistant", "content": [{"type": "text", "text": item["answer"]}]}
             ]
@@ -331,10 +373,9 @@ def _load_image_safe(img_path: Path) -> Image.Image:
 # Evaluation loop
 # ──────────────────────────────────────────────────────────────────────────────
 
-def evaluate_model(model, processor, test_df: pd.DataFrame,
-                   image_root: Path, rouge_scr, device, desc: str = "Test"):
+def evaluate_model(model, processor, test_df: pd.DataFrame, image_root: Path, rouge_scr, device, desc: str = "Test"):
     """
-    Evaluate model on the test set.
+    Evaluate model on the test set (No-RAG).
     Returns metrics dict with the new format:
       {
         "closed-ended": {"n_samples": ..., "Accuracy": ...},
@@ -353,11 +394,14 @@ def evaluate_model(model, processor, test_df: pd.DataFrame,
         question  = row["question"]
         q_type_raw = str(row.get("question_type", "open")).lower()
         q_type    = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
+        body_part = row.get('body_part', '')
+        modality = row.get('modality', '')
+        objects = row.get('objects', '')
 
         query_image  = _load_image_safe(image_root / row["image_path"])
         
-        prompt_content = build_prompt_content(query_image, question, q_type)
-        messages     = [{"role": "user", "content": prompt_content}]
+        content = build_content(query_image, question, q_type, body_part, modality, objects)
+        messages     = [{"role": "user", "content": content}]
         
         all_images = [query_image]
 
@@ -443,7 +487,7 @@ def evaluate_model(model, processor, test_df: pd.DataFrame,
 
 def train_single_client(args, client_id: int):
     """
-    Train one client end-to-end:
+    Train one client end-to-end (No-RAG):
       1) Qwen2-VL + LoRA training
       2) Save JSON artifacts
 
@@ -482,6 +526,11 @@ def train_single_client(args, client_id: int):
     # ── Load CSVs ────────────────────────────────────────────────────────────
     train_df = pd.read_csv(client_csv).reset_index(drop=True)
     test_df  = pd.read_csv(test_csv).reset_index(drop=True)
+    
+    # Limit to 1 sample for testing
+    # train_df = train_df.head(1)
+    # test_df = test_df.head(1)
+    
     log(f"Train samples (client_{client_id}): {len(train_df)}")
     log(f"Test  samples (centralized):       {len(test_df)}")
 
@@ -489,7 +538,9 @@ def train_single_client(args, client_id: int):
     t_start  = time.time()
     dt_start = datetime.datetime.now().isoformat()
 
-    # ── Step 1: Load SmolVLM + LoRA ─────────────────────────────────────────
+    # ── Step 1: Load Qwen2-VL + LoRA ─────────────────────────────────────────
+
+    # ── Step 2: Load Qwen2-VL + LoRA ─────────────────────────────────────────
     torch_dtype = (
         torch.bfloat16
         if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
@@ -507,32 +558,15 @@ def train_single_client(args, client_id: int):
     if processor.tokenizer.pad_token is None:
         processor.tokenizer.pad_token = processor.tokenizer.eos_token
 
-    # Skip quantization for Idefics3/SmolVLM due to compatibility issues
     if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
-        log(f"Skipping quantization for {args.model_name} (Idefics3/SmolVLM)")
-        bnb_config = None
-        if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
-            from transformers import Idefics3ForConditionalGeneration as ModelClass
-        elif "qwen2.5" in args.model_name.lower():
-            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
-        else:
-            from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        from transformers import Idefics3ForConditionalGeneration as ModelClass
+    elif "qwen2.5" in args.model_name.lower():
+        from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
-        from transformers import BitsAndBytesConfig
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch_dtype,
-            bnb_4bit_use_double_quant=True
-        )
-        if "qwen2.5" in args.model_name.lower():
-            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
-        else:
-            from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
     base_model = ModelClass.from_pretrained(
         args.model_name,
-        quantization_config=bnb_config,
         torch_dtype=torch_dtype,
         device_map="auto",
         cache_dir=CACHE_DIR,
@@ -557,9 +591,10 @@ def train_single_client(args, client_id: int):
     model = get_peft_model(base_model, lora_config)
     model.print_trainable_parameters()
 
-    # ── Step 2: Dataset & DataLoader ─────────────────────────────────────────
+    # ── Step 3: Dataset & DataLoader ─────────────────────────────────────────
     train_dataset = MedVQADataset(
-        train_df, image_root=image_root,
+        train_df,
+        image_root=image_root, max_length=args.max_length,
     )
     train_loader = DataLoader(
         train_dataset,
@@ -570,7 +605,7 @@ def train_single_client(args, client_id: int):
 
     rouge_scr = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
 
-    # ── Step 3: Optimizer & Scheduler ────────────────────────────────────────
+    # ── Step 4: Optimizer & Scheduler ────────────────────────────────────────
     optimizer   = torch.optim.AdamW(model.parameters(), lr=args.lr)
     total_steps = len(train_loader) * args.epochs // args.grad_accum
     scheduler   = get_linear_schedule_with_warmup(
@@ -579,12 +614,8 @@ def train_single_client(args, client_id: int):
         num_training_steps=total_steps,
     )
 
-    # ── Step 4: Training loop ────────────────────────────────────────────────
+    # ── Step 5: Training loop ────────────────────────────────────────────────
     log(f"Starting training — {args.epochs} epochs, {len(train_df)} samples ...")
-    best_closed_acc = -1.0
-    best_epoch      = -1
-    best_metrics    = {}
-    all_metrics     = []
     all_losses      = []
     epoch_times     = []
 
@@ -623,75 +654,14 @@ def train_single_client(args, client_id: int):
 
         log(f"Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
 
-        # ── Evaluate ─────────────────────────────────────────────────────────
-        metrics, predictions = evaluate_model(
-            model, processor, test_df,
-            image_root, rouge_scr, device,
-            desc=f"[Client {client_id}] Eval Epoch {epoch}",
-        )
-        c = metrics["closed-ended"]
-        o = metrics["open-ended"]
-        log(f"Epoch {epoch} | "
-            f"Closed [n={c['n_samples']}] Acc={c['Accuracy']:.4f} | "
-            f"Open   [n={o['n_samples']}] Acc={o['Accuracy']:.4f} BLEU={o['BLEU']:.4f} ROUGE-L={o['ROUGE-L']:.4f}")
+    # ── Save final adapter ─────────────────────────────────────────────────────
+    log(f"Saving final adapter to {out_dir}")
+    model.save_pretrained(out_dir)
 
-        all_metrics.append(metrics)
-
-        # ── Save best model (criterion: closed accuracy) ─────────────────────
-        if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
-            best_closed_acc = metrics["closed-ended"]["Accuracy"]
-            best_epoch      = epoch
-            best_metrics    = metrics
-            log(f"New best Closed Acc={best_closed_acc:.4f}  saving adapter to {out_dir}")
-            model.save_pretrained(out_dir)
-
-            pred_df = test_df.copy()
-            pred_df["prediction"] = predictions
-            pred_df["closed_correct"] = [
-                compute_exact_match(p, str(r.answer))
-                if str(r.question_type).lower() == "closed" else None
-                for p, r in zip(predictions, test_df.itertuples())
-            ]
-            pred_df["open_bleu"] = [
-                compute_bleu(p, str(r.answer))
-                if str(r.question_type).lower() == "open" else None
-                for p, r in zip(predictions, test_df.itertuples())
-            ]
-            pred_df.to_csv(out_dir / "best_predictions.csv", index=False)
-
-    # ── Step 5: Save JSON artifacts ──────────────────────────────────────────
+    # ── Step 6: Save JSON artifacts ──────────────────────────────────────────
     t_end   = time.time()
     dt_end  = datetime.datetime.now().isoformat()
     total_s = t_end - t_start
-
-    avg_metrics_payload = {
-        "avg_train_loss": round(float(np.mean(all_losses)), 6),
-        "closed-ended": {
-            "n_samples": int(np.mean([m["closed-ended"]["n_samples"] for m in all_metrics])),
-            "Accuracy": round(float(np.mean([m["closed-ended"]["Accuracy"] for m in all_metrics])), 6),
-        },
-        "open-ended": {
-            "n_samples": int(np.mean([m["open-ended"]["n_samples"] for m in all_metrics])),
-            "Accuracy":    round(float(np.mean([m["open-ended"]["Accuracy"]    for m in all_metrics])), 6),
-            "Exact Match": round(float(np.mean([m["open-ended"]["Exact Match"] for m in all_metrics])), 6),
-            "BLEU":        round(float(np.mean([m["open-ended"]["BLEU"]        for m in all_metrics])), 6),
-            "ROUGE-L":     round(float(np.mean([m["open-ended"]["ROUGE-L"]     for m in all_metrics])), 6),
-            "BERTScore":   0.0,  # Placeholder - compute post-hoc
-        },
-        "hallucination": {
-            "Hallucination Rate": round(float(np.mean([m["hallucination"]["Hallucination Rate"] for m in all_metrics])), 6),
-        },
-        "performance": {
-            "inference_time_s": round(float(np.mean([m["performance"]["inference_time_s"] for m in all_metrics])), 3),
-            "throughput_samples_per_sec": round(float(np.mean([m["performance"]["throughput_samples_per_sec"] for m in all_metrics])), 3),
-        },
-    }
-    best_metrics_payload = {
-        "closed-ended": best_metrics.get("closed-ended", {}),
-        "open-ended":   best_metrics.get("open-ended",   {}),
-        "hallucination": best_metrics.get("hallucination", {}),
-        "performance":   best_metrics.get("performance",   {}),
-    }
 
     experiment_payload = {
         "dataset":           args.dataset,
@@ -707,9 +677,7 @@ def train_single_client(args, client_id: int):
         "seed":              args.seed,
         "num_train_samples": len(train_df),
         "num_test_samples":  len(test_df),
-        "best_epoch":        best_epoch,
-        "best_metrics":      best_metrics_payload,
-        "avg_metrics":       avg_metrics_payload,
+        "avg_train_loss":    round(float(np.mean(all_losses)), 6),
     }
     with open(out_dir / "experiment.json", "w") as f:
         json.dump(experiment_payload, f, indent=2)
@@ -736,7 +704,6 @@ def train_single_client(args, client_id: int):
         json.dump(time_payload, f, indent=2)
 
     log(f"All artifacts saved to: {out_dir}")
-    log(f"Best Closed Acc: {best_closed_acc:.4f} (epoch {best_epoch})")
     log(f"Total time: {total_s/60:.1f} min")
 
     # ── Cleanup GPU memory before next client ────────────────────────────────
@@ -760,18 +727,22 @@ def main():
     )
 
     # ── Experiment identity ──────────────────────────────────────────────────
-    parser.add_argument("--dataset", type=str,   default="VQA-RAD",
-                        help="Dataset name (VQA-RAD | PathVQA)")
+    parser.add_argument("--dataset", type=str,   default="Slake",
+                        help="Dataset name (Slake | VQA-RAD | PathVQA)")
     parser.add_argument("--setting", type=str,   default="iid",
                         help="Federated setting (iid | noniid)")
     parser.add_argument("--alpha",   type=float, default=None,
                         help="Dirichlet alpha for noniid (e.g. 0.5, 0.1)")
     parser.add_argument("--k",       type=int,   default=3,
                         help="Total number of clients")
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolVLM-500M-Instruct",
                         help="VLM model name from HuggingFace")
-    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
+
+    # ── RAG retrieval ────────────────────────────────────────────────────────
+    parser.add_argument("--rag_k",     type=int, default=3,
+                        help="Number of retrieved cases for mRAG context")
 
     # ── Training hyperparams ─────────────────────────────────────────────────
     parser.add_argument("--epochs",     type=int,   default=1)
@@ -780,6 +751,7 @@ def main():
                         help="Gradient accumulation steps")
     parser.add_argument("--lr",         type=float, default=2e-4)
     parser.add_argument("--seed",       type=int,   default=42)
+    parser.add_argument("--max_length", type=int,   default=512)
 
     args = parser.parse_args()
 

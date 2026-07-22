@@ -2,9 +2,9 @@
 """
 06_val_final_nomrag_kd.py
 
-Final validation of the federated adapter on VQA-RAD test set.
-Evaluates the global adapter from step 05 without RAG.
-uv run federated_code/06_val_final_nomrag_kd.py --mode 04_train_client_continue_nomrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+Final validation of the federated adapter on Slake test set.
+Evaluates the global adapter from step 05 WITHOUT RAG (No-RAG).
+uv run federated_code_smolvlm_slake/06_val_final_nomrag_kd.py --mode 04_train_client_continue_nomrag_kd --dataset Slake --setting noniid --alpha 0.1 --k 2
 """
 
 import os
@@ -44,16 +44,16 @@ similarity_model = SentenceTransformer('NeuML/pubmedbert-base-embeddings')
 def log(msg: str):
     print(f"[VAL-FINAL] {msg}", flush=True)
 
-# ── Prompt building (no RAG) ───────────────────────────────────────────────────────
-def build_prompt_content(query_image: Image.Image, question: str, question_type: str):
+# ── No-RAG Logic ───────────────────────────────────────────────────────────────
+def build_content(query_image: Image.Image, question: str, question_type: str, body_part: str = "", modality: str = "", objects: str = ""):
     """
-    Construct a Qwen2-VL prompt without RAG:
-      [query_image] + question text + answer prompt
+    Construct a Qwen2-VL prompt with Slake metadata (No-RAG):
+      [query_image] + question + medical context + answer prompt
     """
     content = []
     
     # 1) System and Image
-    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
+    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant specializing in medical image analysis.\n\nImage:\n"})
     content.append({"type": "image", "image": query_image})
     
     # 2) Question and Question Type
@@ -63,16 +63,40 @@ def build_prompt_content(query_image: Image.Image, question: str, question_type:
     )
     content.append({"type": "text", "text": q_text})
     
-    # 3) Instruction and rules
+    # 3) Medical Context (from Slake metadata)
+    objects_summary = ""
+    if objects:
+        try:
+            import json
+            objects_list = json.loads(objects)
+            if isinstance(objects_list, list) and len(objects_list) > 0:
+                object_names = [obj.get('name', 'unknown') for obj in objects_list]
+                objects_summary = f"{len(objects_list)} objects detected: {', '.join(object_names)}"
+        except:
+            objects_summary = ""
+    
+    context_text = (
+        "Medical Context:\n"
+        f"- Body Part: {body_part}\n"
+        f"- Modality: {modality}\n"
+    )
+    if objects_summary:
+        context_text += f"- Detected Objects: {objects_summary}\n"
+    context_text += "\n"
+    
+    content.append({"type": "text", "text": context_text})
+    
+    # 4) Instruction and rules
     instruction = (
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
         "- If the question is CLOSED-ENDED (Yes/No only):\n"
-        "  - The final answer MUST be \"yes\" or \"no\"\n"
-        "  - Focus primarily on the image\n\n"
+        "  • The final answer MUST be \"yes\" or \"no\"\n"
+        "  • Use the medical context and detected objects to inform your decision\n"
+        "  • Focus primarily on the image\n\n"
         "- If the question is OPEN-ENDED:\n"
-        "  - Use the image to provide a comprehensive answer\n"
-        "  - Provide detailed reasoning based on visual evidence\n\n"
+        "  • Use the image, body part, modality, and detected objects to provide an accurate answer\n"
+        "  • Consider the imaging modality when interpreting findings\n\n"
         "General rules:\n"
         "- Do not output reasoning steps\n"
         "- Output only the final answer\n\n"
@@ -87,7 +111,6 @@ def _load_image_safe(path):
         return Image.open(path).convert("RGB")
     except:
         return Image.new("RGB", (224, 224), color="black")
-
 
 # ── Metrics ──────────────────────────────────────────────────────────────────
 def _normalize(text: str) -> str:
@@ -185,7 +208,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, required=True,
                         help="Script name suffix from step 05 (e.g., 04_train_client_continue_mrag_kd)")
-    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--dataset", type=str, default="Slake")
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
@@ -196,9 +219,9 @@ def main():
     parser.add_argument("--global_adapter_final", type=str, default=None,
                         help="Path to global adapter from step 05 (auto-generated if not provided)")
     parser.add_argument("--test_csv", type=str, default=None,
-                        help="Path to VQA-RAD test CSV (auto-generated if not provided)")
+                        help="Path to Slake test CSV (auto-generated if not provided)")
     parser.add_argument("--image_root", type=str, default=None,
-                        help="Path to VQA-RAD images (auto-generated if not provided)")
+                        help="Path to Slake images (auto-generated if not provided)")
     parser.add_argument("--out_dir", type=str, default=None,
                         help="Output directory (auto-generated if not provided)")
     args = parser.parse_args()
@@ -213,9 +236,9 @@ def main():
     if args.global_adapter_final is None:
         args.global_adapter_final = str(base / "server" / f"global_adapter_{args.mode}")
     if args.test_csv is None:
-        args.test_csv = str(data_root / "VQA-RAD" / "centralized" / "test.csv")
+        args.test_csv = str(data_root / "Slake" / "centralized" / "test.csv")
     if args.image_root is None:
-        args.image_root = str(data_root / "VQA-RAD" / "centralized")
+        args.image_root = str(data_root / "Slake" / "centralized")
     if args.out_dir is None:
         args.out_dir = str(base / f"final_val_{args.mode}")
 
@@ -227,36 +250,24 @@ def main():
 
     test_df = pd.read_csv(args.test_csv)
     image_root = Path(args.image_root)
+    
+    # Limit to 1 sample for testing
+    # test_df = test_df.head(1)
+    
     log(f"Test samples: {len(test_df)}")
     
     log(f"Loading processor and base model {args.model_name}...")
     processor = AutoProcessor.from_pretrained(args.model_name, min_pixels=128*28*28, max_pixels=256*28*28, cache_dir=CACHE_DIR)
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    # Skip quantization for Idefics3/SmolVLM due to compatibility issues
     if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
-        log(f"Skipping quantization for {args.model_name} (Idefics3/SmolVLM)")
-        bnb_config = None
-        if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
-            from transformers import Idefics3ForConditionalGeneration as ModelClass
-        elif "qwen2.5" in args.model_name.lower():
-            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
-        else:
-            from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        from transformers import Idefics3ForConditionalGeneration as ModelClass
+    elif "qwen2.5" in args.model_name.lower():
+        from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
-        from transformers import BitsAndBytesConfig
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch_dtype,
-            bnb_4bit_use_double_quant=True
-        )
-        if "qwen2.5" in args.model_name.lower():
-            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
-        else:
-            from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
-    base_model = ModelClass.from_pretrained(args.model_name, quantization_config=bnb_config, torch_dtype=torch_dtype, device_map="auto", cache_dir=CACHE_DIR)
+    base_model = ModelClass.from_pretrained(args.model_name, torch_dtype=torch_dtype, device_map="auto", cache_dir=CACHE_DIR)
     
     log(f"Loading global adapter final: {args.global_adapter_final}...")
     model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter_final)))
@@ -272,14 +283,18 @@ def main():
         question = row["question"]
         q_type_raw = str(row.get("question_type", "open")).lower()
         q_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
+        body_part = row.get('body_part', '')
+        modality = row.get('modality', '')
+        objects = row.get('objects', '')
         
         img_path = image_root / row["image_path"]
         query_image = _load_image_safe(img_path)
         
-        # Build prompt without RAG
-        content = build_prompt_content(query_image, question, q_type)
+        # Build prompt with query image and Slake metadata
+        content = build_content(query_image, question, q_type, body_part, modality, objects)
         messages = [{"role": "user", "content": content}]
         
+        # Only query image (retrieved contexts are text-only)
         all_images = [query_image]
         
         prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)

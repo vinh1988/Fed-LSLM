@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-03_train_kd_vqarad.py
+03_train_kd_roco_vqarad.py
 
-Continue training the FedAvg global LoRA adapter on VQA-RAD dataset.
+Continue training the FedAvg global LoRA adapter on ROCO + VQA-RAD datasets with Knowledge Distillation.
 
 Pipeline:
 Base SmolVLM-500M
     -> Load server/global_adapter_{mode} (from federated training)
-    -> Continue supervised LoRA training on VQA-RAD
-    -> Save server/global_adapter_vqarad_{mode}
+    -> Continue supervised LoRA training on ROCO + VQA-RAD with reasoning KD
+    -> Save server/global_adapter_roco_vqarad_{mode}
 
-uv run federated_code_smolvlm/03_train_kd_vqarad.py --mode 01_train_client_nomrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+uv run federated_code_smolvlm_slake/03_train_kd_roco_vqarad.py --mode 01_train_client_nomrag_kd --dataset Slake --setting noniid --alpha 0.1 --k 2
 """
 
 import os
@@ -154,6 +154,8 @@ class VQARADROCOKDDataset(Dataset):
             # ROCO CSV has columns: image_name, caption
             # Drop rows with missing image_name
             df_roco = df_roco.dropna(subset=['image_name']).reset_index(drop=True)
+            # Limit to 1 sample for testing
+            # df_roco = df_roco.head(1)
             for _, row in df_roco.iterrows():
                 image_path = Path(roco_image_root) / "images" / row["image_name"]
                 caption = row["caption"]
@@ -492,6 +494,8 @@ def main():
     df_vqarad = None
     if args.vqarad_csv and Path(args.vqarad_csv).exists():
         df_vqarad = pd.read_csv(args.vqarad_csv)
+        # Limit to 1 sample for testing
+        # df_vqarad = df_vqarad.head(1)
         log(f"Loaded VQA-RAD: {len(df_vqarad)} samples")
     
     train_dataset = VQARADROCOKDDataset(

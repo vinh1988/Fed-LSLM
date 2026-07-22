@@ -652,6 +652,10 @@ def main():
 
             log(f"[Client {client_id}] Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
 
+        # Save final adapter
+        log(f"[Client {client_id}] Saving final adapter to {out_dir}")
+        model.save_pretrained(out_dir)
+
         t_end = time.time()
         total_s = t_end - t_start
 

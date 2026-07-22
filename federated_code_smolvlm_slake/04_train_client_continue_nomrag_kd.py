@@ -2,12 +2,12 @@
 """
 04_train_client_continue_nomrag_kd.py
 
-Continue fine-tuning on the VQA-RAD dataset using the ROCO-trained adapter without RAG.
-Uses Qwen2-VL for generation without retrieval augmentation.
+Continue fine-tuning on the Slake dataset using the ROCO+VQA-RAD-trained adapter WITHOUT RAG.
+Uses Qwen2-VL for generation with Slake metadata.
 # Step 04
-uv run federated_code/04_train_client_continue_nomrag_kd.py --mode 04_train_client_continue_nomrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+uv run federated_code_smolvlm_slake/04_train_client_continue_nomrag_kd.py --mode 04_train_client_continue_nomrag_kd --dataset Slake --setting noniid --alpha 0.1 --k 2
 # Step 05
-uv run federated_code/05_fedavg_final_nomrag_kd.py --mode 04_train_client_continue_nomrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+uv run federated_code_smolvlm_slake/05_fedavg_final_nomrag_kd.py --mode 04_train_client_continue_nomrag_kd --dataset Slake --setting noniid --alpha 0.1 --k 2
 
 """
 
@@ -76,17 +76,23 @@ def sample_gpu_memory_gb() -> float:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Prompt building (no RAG)
+# No RAG - No retrieval components needed
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# No RAG - No retrieval components needed
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Dataset & collate (no RAG)
+# Dataset & collate (mRAG)
 # ──────────────────────────────────────────────────────────────────────────────
 
 class MedVQADataset(Dataset):
-    def __init__(self, df: pd.DataFrame, image_root: Path):
+    def __init__(self, df: pd.DataFrame, image_root: Path, max_length: int = 512):
         self.df = df.reset_index(drop=True)
         self.image_root = image_root
+        self.max_length = max_length
 
     def __len__(self):
         return len(self.df)
@@ -104,23 +110,31 @@ class MedVQADataset(Dataset):
         q_type_raw   = str(row.get("question_type", "open")).lower()
         question_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
         
+        # Load SLAKE metadata
+        body_part = row.get('body_part', '')
+        modality = row.get('modality', '')
+        objects = row.get('objects', '')
+        
         return {
             "query_image":   self._load_image(row["image_path"]),
             "question":      row["question"],
             "question_type": question_type,
-            "answer":        str(row["answer"])
+            "answer":        str(row["answer"]),
+            "body_part":     body_part,
+            "modality":      modality,
+            "objects":       objects
         }
 
 
-def build_prompt_content(query_image: Image.Image, question: str, question_type: str):
+def build_content(query_image: Image.Image, question: str, question_type: str, body_part: str = "", modality: str = "", objects: str = ""):
     """
-    Construct a Qwen2-VL prompt without RAG:
-      [query_image] + question text + answer prompt
+    Construct a Qwen2-VL prompt with Slake metadata (No-RAG):
+      [query_image] + question + medical context + answer prompt
     """
     content = []
     
     # 1) System and Image
-    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
+    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant specializing in medical image analysis.\n\nImage:\n"})
     content.append({"type": "image", "image": query_image})
     
     # 2) Question and Question Type
@@ -130,16 +144,41 @@ def build_prompt_content(query_image: Image.Image, question: str, question_type:
     )
     content.append({"type": "text", "text": q_text})
     
-    # 3) Instruction and rules
+    # 3) Medical Context (from Slake metadata)
+    # Format objects summary from JSON
+    objects_summary = ""
+    if objects:
+        try:
+            import json
+            objects_list = json.loads(objects)
+            if isinstance(objects_list, list) and len(objects_list) > 0:
+                object_names = [obj.get('name', 'unknown') for obj in objects_list]
+                objects_summary = f"{len(objects_list)} objects detected: {', '.join(object_names)}"
+        except:
+            objects_summary = ""
+    
+    context_text = (
+        "Medical Context:\n"
+        f"- Body Part: {body_part}\n"
+        f"- Modality: {modality}\n"
+    )
+    if objects_summary:
+        context_text += f"- Detected Objects: {objects_summary}\n"
+    context_text += "\n"
+    
+    content.append({"type": "text", "text": context_text})
+    
+    # 4) Instruction and rules
     instruction = (
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
         "- If the question is CLOSED-ENDED (Yes/No only):\n"
-        "  - The final answer MUST be \"yes\" or \"no\"\n"
-        "  - Focus primarily on the image\n\n"
+        "  • The final answer MUST be \"yes\" or \"no\"\n"
+        "  • Use the medical context and detected objects to inform your decision\n"
+        "  • Focus primarily on the image\n\n"
         "- If the question is OPEN-ENDED:\n"
-        "  - Use the image to provide a comprehensive answer\n"
-        "  - Provide detailed reasoning based on visual evidence\n\n"
+        "  • Use the image, body part, modality, and detected objects to provide an accurate answer\n"
+        "  • Consider the imaging modality when interpreting findings\n\n"
         "General rules:\n"
         "- Do not output reasoning steps\n"
         "- Output only the final answer\n\n"
@@ -160,10 +199,11 @@ def get_collate_fn(processor):
             sample_images = [item["query_image"]]
             all_images_per_sample.append(sample_images)
             
-            prompt_content = build_prompt_content(
-                item["query_image"], item["question"], item["question_type"]
+            content = build_content(
+                item["query_image"], item["question"], item["question_type"],
+                item["body_part"], item["modality"], item["objects"]
             )
-            user_messages = [{"role": "user", "content": prompt_content}]
+            user_messages = [{"role": "user", "content": content}]
             full_messages = user_messages + [
                 {"role": "assistant", "content": [{"type": "text", "text": item["answer"]}]}
             ]
@@ -235,6 +275,9 @@ def evaluate_model(model, processor, test_df, image_root, rouge_scr, device, des
         question = row["question"]
         q_type_raw = str(row.get("question_type", "open")).lower()
         q_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
+        body_part = row.get('body_part', '')
+        modality = row.get('modality', '')
+        objects = row.get('objects', '')
         
         img_path = image_root / row["image_path"]
         try:
@@ -242,8 +285,8 @@ def evaluate_model(model, processor, test_df, image_root, rouge_scr, device, des
         except:
             query_image = Image.new("RGB", (224, 224), color="black")
         
-        prompt_content = build_prompt_content(query_image, question, q_type)
-        messages = [{"role": "user", "content": prompt_content}]
+        content = build_content(query_image, question, q_type, body_part, modality, objects)
+        messages = [{"role": "user", "content": content}]
         
         all_images = [query_image]
         
@@ -355,7 +398,7 @@ def main():
                         help="Script name suffix for this step (e.g., 04_train_client_continue_mrag_kd)")
     parser.add_argument("--roco_slake_mode", type=str, default="01_train_client_mrag_kd",
                         help="Script name suffix from step 03 for ROCO+Slake adapter (default: 01_train_client_mrag_kd)")
-    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--dataset", type=str, default="Slake")
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
@@ -363,8 +406,10 @@ def main():
                         help="VLM model name from HuggingFace")
     parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
-    parser.add_argument("--global_adapter_vqarad", type=str, default=None,
-                        help="Path to global adapter from VQA-RAD training (auto-generated if not provided)")
+    parser.add_argument("--global_adapter_roco_slake", type=str, default=None,
+                        help="Path to global adapter from ROCO/SLAKE training (auto-generated if not provided)")
+    parser.add_argument("--rag_k", type=int, default=3,
+                        help="Number of retrieved cases for mRAG context")
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--grad_accum", type=int, default=8)
@@ -381,13 +426,13 @@ def main():
         base = base / f"alpha_{args.alpha}"
     base = base / f"k{args.k}" / args.model_short / "server"
     
-    if args.global_adapter_vqarad is None:
-        args.global_adapter_vqarad = str(base / f"global_adapter_vqarad_{args.roco_slake_mode}")
+    if args.global_adapter_roco_slake is None:
+        args.global_adapter_roco_slake = str(base / f"global_adapter_roco_vqarad_{args.roco_slake_mode}")
 
     set_seed(args.seed)
     
-    log("Starting VQA-RAD continued training for ALL clients...")
-    log(f"VQA-RAD adapter: {args.global_adapter_vqarad}")
+    log("Starting Slake continued training for ALL clients...")
+    log(f"ROCO+VQA-RAD adapter: {args.global_adapter_roco_slake}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     gpu_static = get_gpu_static_info()
@@ -402,39 +447,23 @@ def main():
 
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
     
-    # Skip quantization for Idefics3/SmolVLM due to compatibility issues
     if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
-        log(f"Skipping quantization for {args.model_name} (Idefics3/SmolVLM)")
-        bnb_config = None
-        if "smolvlm" in args.model_name.lower() or "idefics3" in args.model_name.lower():
-            from transformers import Idefics3ForConditionalGeneration as ModelClass
-        elif "qwen2.5" in args.model_name.lower():
-            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
-        else:
-            from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        from transformers import Idefics3ForConditionalGeneration as ModelClass
+    elif "qwen2.5" in args.model_name.lower():
+        from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
     else:
-        from transformers import BitsAndBytesConfig
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch_dtype,
-            bnb_4bit_use_double_quant=True
-        )
-        if "qwen2.5" in args.model_name.lower():
-            from transformers import Qwen2_5_VLForConditionalGeneration as ModelClass
-        else:
-            from transformers import Qwen2VLForConditionalGeneration as ModelClass
+        from transformers import Qwen2VLForConditionalGeneration as ModelClass
 
     base_model = ModelClass.from_pretrained(
         args.model_name,
-        quantization_config=bnb_config,
         torch_dtype=torch_dtype,
         device_map="auto"
     )
 
-    # 2. Load VQA-RAD-trained Adapter (global initialization state)
-    log(f"Loading pretrained VQA-RAD adapter from {args.global_adapter_vqarad}...")
-    model = PeftModel.from_pretrained(base_model, str(Path(args.global_adapter_vqarad)), is_trainable=True, is_local=True)
+    # 2. Load ROCO+VQA-RAD-trained Adapter (global initialization state)
+    log(f"Loading pretrained ROCO+VQA-RAD adapter from {args.global_adapter_roco_slake}...")
+    adapter_path = str(Path(args.global_adapter_roco_slake).as_posix())
+    model = PeftModel.from_pretrained(base_model, adapter_path, is_trainable=True, is_local=True)
     model.print_trainable_parameters()
 
     # 3. Save a deep copy of the global adapter weights
@@ -457,12 +486,18 @@ def main():
         
         train_df = pd.read_csv(client_csv)
         test_df = pd.read_csv(test_csv)
+        
+        # Limit to 1 sample for testing
+        # train_df = train_df.head(1)
+        # test_df = test_df.head(1)
+        
         log(f"Train samples: {len(train_df)}")
         log(f"Test samples: {len(test_df)}")
         
         # ── Dataset & DataLoader ───────────────────────────────────────────
         train_dataset = MedVQADataset(
-            train_df, image_root=image_root,
+            train_df,
+            image_root=image_root, max_length=512,
         )
         train_loader = DataLoader(
             train_dataset,
@@ -479,9 +514,6 @@ def main():
         all_losses = []
         epoch_times = []
         gpu_mem_readings_gb = []
-        
-        best_closed_acc = -1.0
-        best_epoch = -1
 
         t_start = time.time()
         dt_start = datetime.datetime.now().isoformat()
@@ -516,16 +548,10 @@ def main():
             gpu_mem_readings_gb.append(sample_gpu_memory_gb())
 
             log(f"[Client {client_id}] Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
-            
-            # Eval at end of epoch
-            metrics = evaluate_model(model, processor, test_df, Path(image_root), rouge_scr, device, desc=f"Eval Epoch {epoch}")
-            log(f"[Client {client_id}] Epoch {epoch} | Closed Acc={metrics['closed-ended']['Accuracy']:.4f} | Open ROUGE-L={metrics['open-ended']['ROUGE-L']:.4f}")
-            
-            if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
-                best_closed_acc = metrics["closed-ended"]["Accuracy"]
-                best_epoch = epoch
-                log(f"[Client {client_id}] New best Closed Acc = {best_closed_acc:.4f}. Saving best adapter...")
-                model.save_pretrained(out_dir)
+
+        # Save final adapter
+        log(f"[Client {client_id}] Saving final adapter to {out_dir}")
+        model.save_pretrained(out_dir)
 
         t_end = time.time()
         total_s = t_end - t_start
@@ -561,14 +587,6 @@ def main():
             "batch_size": args.batch_size,
             "lr": args.lr,
             "avg_train_loss": round(float(np.mean(all_losses)), 4),
-            "best_closed_acc": round(best_closed_acc, 4),
-            "best_epoch": best_epoch,
-            "best_metrics": {
-                "closed-ended": {"Accuracy": round(best_closed_acc, 4)},
-                "open-ended": {"Accuracy": 0.0, "BLEU": 0.0, "ROUGE-L": 0.0, "BERTScore": 0.0},
-                "hallucination": {"Hallucination Rate": 0.0},
-                "performance": {"inference_time_s": 0.0, "throughput_samples_per_sec": 0.0}
-            }
         }
         with open(out_dir / "experiment.json", "w") as f:
             json.dump(experiment_payload, f, indent=2)

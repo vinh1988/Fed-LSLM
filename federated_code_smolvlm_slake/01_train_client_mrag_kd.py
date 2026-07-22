@@ -780,6 +780,10 @@ def train_single_client(args, client_id: int):
 
         log(f"Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
 
+    # ── Save final adapter ─────────────────────────────────────────────────────
+    log(f"Saving final adapter to {out_dir}")
+    model.save_pretrained(out_dir)
+
     # ── Step 7: Save JSON artifacts ──────────────────────────────────────────
     t_end   = time.time()
     dt_end  = datetime.datetime.now().isoformat()
