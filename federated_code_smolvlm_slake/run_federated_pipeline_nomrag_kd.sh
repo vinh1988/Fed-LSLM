@@ -19,7 +19,7 @@ DATASET="Slake"
 SETTING="noniid"
 ALPHA=0.1
 K=2
-MODE="04_train_client_continue_nomrag_kd"
+CONTINUE_MODE="04_train_client_continue_nomrag_kd"  # Mode for step 04 (continue training)
 VQARAD_MODE="01_train_client_nomrag_kd"  # Mode for VQA-RAD adapter from step 03
 MODEL_VERSION="smolvlm500"  # Options: "2", "2.5", or "smolvlm500"
 
@@ -129,7 +129,7 @@ echo "Dataset: $DATASET"
 echo "Setting: $SETTING"
 echo "Alpha: $ALPHA"
 echo "K: $K"
-echo "Mode: $MODE"
+echo "Continue Mode: $CONTINUE_MODE"
 echo "Model: $MODEL_NAME"
 echo "Model Short: $MODEL_SHORT"
 echo "Log file: $LOG_FILE"
@@ -244,7 +244,7 @@ else
     echo ""
     
     cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/04_train_client_continue_nomrag_kd.py --mode $MODE --roco_slake_mode $VQARAD_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
+    if eval "uv run $FEDERATED_CODE/04_train_client_continue_nomrag_kd.py --mode $CONTINUE_MODE --roco_slake_mode $VQARAD_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
         echo "[SUCCESS] Continue Training on Slake completed"
         echo ""
     else
@@ -257,16 +257,16 @@ fi
 # ==============================================================================
 # STEP 05: Final Federated Averaging
 # ==============================================================================
-STEP05_OUTPUT="$SERVER_DIR/global_adapter_${MODE}"
-STEP05_CMD="uv run $FEDERATED_CODE/05_fedavg_final_nomrag_kd.py --mode $MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_short $MODEL_SHORT"
+STEP05_OUTPUT="$SERVER_DIR/global_adapter_${CONTINUE_MODE}"
+STEP05_CMD="uv run $FEDERATED_CODE/05_fedavg_final_nomrag_kd.py --mode $CONTINUE_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_short $MODEL_SHORT"
 
 run_step "05" "Final Federated Averaging" "$STEP05_CMD" "$STEP05_OUTPUT"
 
 # ==============================================================================
 # STEP 06: Final Validation
 # ==============================================================================
-STEP06_OUTPUT="$EXPERIMENTS_DIR/final_val_${MODE}"
-STEP06_CMD="uv run $FEDERATED_CODE/06_val_final_nomrag_kd.py --mode $MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
+STEP06_OUTPUT="$EXPERIMENTS_DIR/final_val_${CONTINUE_MODE}"
+STEP06_CMD="uv run $FEDERATED_CODE/06_val_final_nomrag_kd.py --mode $CONTINUE_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
 
 run_step "06" "Final Validation" "$STEP06_CMD" "$STEP06_OUTPUT"
 
