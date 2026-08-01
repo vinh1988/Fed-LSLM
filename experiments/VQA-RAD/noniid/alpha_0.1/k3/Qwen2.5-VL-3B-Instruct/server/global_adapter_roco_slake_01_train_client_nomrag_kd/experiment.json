@@ -1,0 +1,31 @@
+{
+  "dataset": "ROCO+Slake",
+  "roco_samples": 1544,
+  "slake_samples": 1000,
+  "total_samples": 2021,
+  "epochs": 1,
+  "batch_size": 1,
+  "lr": 2e-05,
+  "avg_train_loss": 0.6551,
+  "best_metrics": {
+    "closed-ended": {
+      "n_samples": 251,
+      "Accuracy": 0.76494
+    },
+    "open-ended": {
+      "n_samples": 200,
+      "Accuracy": 0.265,
+      "Exact Match": 0.265,
+      "BLEU": 0.075158,
+      "ROUGE-L": 0.362088,
+      "BERTScore": 0.0
+    },
+    "hallucination": {
+      "Hallucination Rate": 0.0
+    },
+    "performance": {
+      "inference_time_s": 363.673,
+      "throughput_samples_per_sec": 1.24
+    }
+  }
+}

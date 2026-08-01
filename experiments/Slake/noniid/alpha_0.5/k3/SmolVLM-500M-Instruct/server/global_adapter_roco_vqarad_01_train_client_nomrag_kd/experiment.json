@@ -1,0 +1,9 @@
+{
+  "dataset": "VQA-RAD",
+  "vqarad_samples": 1793,
+  "total_samples": 2814,
+  "epochs": 1,
+  "batch_size": 1,
+  "lr": 2e-05,
+  "avg_train_loss": 0.5942
+}

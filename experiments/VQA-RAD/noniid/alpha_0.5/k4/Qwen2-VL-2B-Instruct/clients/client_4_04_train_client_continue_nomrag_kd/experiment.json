@@ -1,0 +1,31 @@
+{
+  "dataset": "VQA-RAD",
+  "setting": "noniid",
+  "alpha": 0.5,
+  "k": 4,
+  "client_id": 4,
+  "epochs": 5,
+  "batch_size": 1,
+  "lr": 0.0002,
+  "avg_train_loss": 0.2992,
+  "best_closed_acc": 0.5498,
+  "best_epoch": 2,
+  "best_metrics": {
+    "closed-ended": {
+      "Accuracy": 0.5498
+    },
+    "open-ended": {
+      "Accuracy": 0.0,
+      "BLEU": 0.0,
+      "ROUGE-L": 0.0,
+      "BERTScore": 0.0
+    },
+    "hallucination": {
+      "Hallucination Rate": 0.0
+    },
+    "performance": {
+      "inference_time_s": 0.0,
+      "throughput_samples_per_sec": 0.0
+    }
+  }
+}

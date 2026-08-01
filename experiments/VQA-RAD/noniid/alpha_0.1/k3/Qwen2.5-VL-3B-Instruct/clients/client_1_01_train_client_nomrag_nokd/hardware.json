@@ -1,0 +1,6 @@
+{
+  "gpu_name": "NVIDIA RTX A5000",
+  "total_vram_gb": 23.99,
+  "avg_allocated_vram_gb": 7.34,
+  "peak_allocated_vram_gb": 7.34
+}
