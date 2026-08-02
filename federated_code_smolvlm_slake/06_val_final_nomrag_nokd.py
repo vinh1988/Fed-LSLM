@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-06_val_final_mrag_kd.py
+06_val_final_nomrag_nokd.py
 
-Final validation of the federated adapter on VQA-RAD test set.
-Evaluates the global adapter from step 05 using pure mRAG (text-only retrieved context).
-uv run federated_code/06_val_final_mrag_kd.py --mode 04_train_client_continue_mrag_kd --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2 --rag_k 3
+Final validation of the federated adapter on Slake test set.
+Evaluates the global adapter from step 02 (FedAvg) WITHOUT RAG (No-RAG) and WITHOUT KD.
+uv run federated_code_smolvlm_slake/06_val_final_nomrag_nokd.py --mode 01_train_client_nomrag_nokd --dataset Slake --setting noniid --alpha 0.1 --k 2
 """
 
 import os
@@ -20,7 +20,6 @@ import numpy as np
 import pandas as pd
 
 import torch
-import faiss
 from PIL import Image
 from tqdm import tqdm
 
@@ -42,47 +41,62 @@ os.environ["HUGGINGFACE_HUB_CACHE"] = str(CACHE_DIR / "hub")
 # Load medical embedding model for hallucination detection
 similarity_model = SentenceTransformer('NeuML/pubmedbert-base-embeddings')
 
-# BiomedCLIP model for mRAG retrieval
-BIOMEDCLIP_MODEL = "hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
-
 def log(msg: str):
     print(f"[VAL-FINAL] {msg}", flush=True)
 
-# ── mRAG Logic ───────────────────────────────────────────────────────────────
-def build_mrag_content(query_image: Image.Image, question: str, question_type: str, context_list: list):
+# ── No-RAG Logic ───────────────────────────────────────────────────────────────
+def build_content(query_image: Image.Image, question: str, question_type: str, body_part: str = "", modality: str = "", objects: str = ""):
     """
-    Construct a Qwen2-VL mRAG prompt:
-      [query_image] + question text + context + answer prompt
-      Retrieved context is text-only (no images)
+    Construct a Qwen2-VL prompt with Slake metadata (No-RAG):
+      [query_image] + question + medical context + answer prompt
     """
     content = []
     
     # 1) System and Image
-    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant.\n\nImage:\n"})
+    content.append({"type": "text", "text": "System:\nYou are a medical visual question answering assistant specializing in medical image analysis.\n\nImage:\n"})
     content.append({"type": "image", "image": query_image})
     
     # 2) Question and Question Type
-    k = len(context_list)
     q_text = (
         f"\n\nQuestion:\n{question}\n\n"
         f"Question Type:\n{question_type}\n\n"
-        f"Retrieved Medical Evidence (Top-{k} QA cases ranked by similarity score):\n\n"
     )
     content.append({"type": "text", "text": q_text})
     
-    # 3) Retrieved text context (text-only)
-    for case_text in context_list:
-        content.append({"type": "text", "text": case_text + "\n"})
+    # 3) Medical Context (from Slake metadata)
+    objects_summary = ""
+    if objects:
+        try:
+            import json
+            objects_list = json.loads(objects)
+            if isinstance(objects_list, list) and len(objects_list) > 0:
+                object_names = [obj.get('name', 'unknown') for obj in objects_list]
+                objects_summary = f"{len(objects_list)} objects detected: {', '.join(object_names)}"
+        except:
+            objects_summary = ""
+    
+    context_text = (
+        "Medical Context:\n"
+        f"- Body Part: {body_part}\n"
+        f"- Modality: {modality}\n"
+    )
+    if objects_summary:
+        context_text += f"- Detected Objects: {objects_summary}\n"
+    context_text += "\n"
+    
+    content.append({"type": "text", "text": context_text})
     
     # 4) Instruction and rules
     instruction = (
         "Instruction:\n"
         "You must adapt your reasoning based on the question type.\n\n"
         "- If the question is CLOSED-ENDED (Yes/No only):\n"
-        "  - The final answer MUST be \"yes\" or \"no\"\n"
-        "  - Focus primarily on the image\n\n"
+        "  • The final answer MUST be \"yes\" or \"no\"\n"
+        "  • Use the medical context and detected objects to inform your decision\n"
+        "  • Focus primarily on the image\n\n"
         "- If the question is OPEN-ENDED:\n"
-        "  - Use the image to answer the question\n\n"
+        "  • Use the image, body part, modality, and detected objects to provide an accurate answer\n"
+        "  • Consider the imaging modality when interpreting findings\n\n"
         "General rules:\n"
         "- Do not output reasoning steps\n"
         "- Output only the final answer\n\n"
@@ -97,32 +111,6 @@ def _load_image_safe(path):
         return Image.open(path).convert("RGB")
     except:
         return Image.new("RGB", (224, 224), color="black")
-
-def get_biomedclip_model():
-    """Load BiomedCLIP model for image-text embedding."""
-    import open_clip
-    model, _, preprocess = open_clip.create_model_and_transforms(BIOMEDCLIP_MODEL)
-    tokenizer = open_clip.get_tokenizer(BIOMEDCLIP_MODEL)
-    return model, preprocess, tokenizer
-
-def compute_text_embedding(text, model, tokenizer):
-    """Compute BiomedCLIP text embedding."""
-    import open_clip
-    text_tokens = tokenizer([text])
-    with torch.no_grad():
-        text_features = model.encode_text(text_tokens)
-    return text_features / text_features.norm(dim=-1, keepdim=True)
-
-def perform_mrag_retrieval(query_text, train_texts, train_embeddings, rag_k, model, tokenizer):
-    """Retrieve top-k similar texts using FAISS."""
-    query_emb = compute_text_embedding(query_text, model, tokenizer)
-    query_emb_np = query_emb.cpu().numpy()
-    
-    # FAISS search
-    distances, indices = train_index.search(query_emb_np, rag_k)
-    
-    retrieved_contexts = [train_texts[i] for i in indices[0]]
-    return retrieved_contexts
 
 # ── Metrics ──────────────────────────────────────────────────────────────────
 def _normalize(text: str) -> str:
@@ -228,8 +216,6 @@ def main():
                         help="VLM model name from HuggingFace")
     parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
-    parser.add_argument("--rag_k", type=int, default=3,
-                        help="Number of retrieved cases for mRAG context")
     parser.add_argument("--global_adapter_final", type=str, default=None,
                         help="Path to global adapter from step 05 (auto-generated if not provided)")
     parser.add_argument("--test_csv", type=str, default=None,
@@ -265,6 +251,9 @@ def main():
     test_df = pd.read_csv(args.test_csv)
     image_root = Path(args.image_root)
     
+    # Limit to 1 sample for testing
+    # test_df = test_df.head(1)
+    
     log(f"Test samples: {len(test_df)}")
     
     log(f"Loading processor and base model {args.model_name}...")
@@ -287,52 +276,22 @@ def main():
     rouge_scr = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
     predictions = []
     
-    # Load BiomedCLIP for mRAG retrieval
-    log("Loading BiomedCLIP model for retrieval...")
-    biomedclip_model, _, biomedclip_tokenizer = get_biomedclip_model()
-    biomedclip_model.eval()
-    
-    # Precompute text embeddings for test set (use test set as retrieval corpus)
-    log("Precomputing text embeddings for retrieval...")
-    test_texts = []
-    for _, row in test_df.iterrows():
-        text = f"Question: {row['question']}"
-        test_texts.append(text)
-    
-    test_embeddings = []
-    for text in tqdm(test_texts, desc="Computing embeddings"):
-        emb = compute_text_embedding(text, biomedclip_model, biomedclip_tokenizer)
-        test_embeddings.append(emb.cpu().numpy())
-    
-    test_embeddings = np.vstack(test_embeddings).astype('float32')
-    
-    # Build FAISS index
-    global train_index
-    embedding_dim = test_embeddings.shape[1]
-    train_index = faiss.IndexFlatIP(embedding_dim)
-    train_index.add(test_embeddings)
-    log(f"Built FAISS index with {len(test_texts)} embeddings")
-    
-    log(f"Starting inference with rag_k={args.rag_k}...")
+    log(f"Starting inference...")
     t_start = time.time()
     
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df), desc="Predicting"):
         question = row["question"]
         q_type_raw = str(row.get("question_type", "open")).lower()
         q_type = "CLOSED-ENDED" if q_type_raw == "closed" else "OPEN-ENDED"
+        body_part = row.get('body_part', '')
+        modality = row.get('modality', '')
+        objects = row.get('objects', '')
         
         img_path = image_root / row["image_path"]
         query_image = _load_image_safe(img_path)
         
-        # Perform mRAG retrieval (text-only)
-        query_text = f"Question: {question}"
-        retrieved_contexts = perform_mrag_retrieval(
-            query_text, test_texts, test_embeddings, args.rag_k,
-            biomedclip_model, biomedclip_tokenizer
-        )
-        
-        # Build mRAG prompt with query image and text context
-        content = build_mrag_content(query_image, question, q_type, retrieved_contexts)
+        # Build prompt with query image and Slake metadata
+        content = build_content(query_image, question, q_type, body_part, modality, objects)
         messages = [{"role": "user", "content": content}]
         
         # Only query image (retrieved contexts are text-only)
