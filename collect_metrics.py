@@ -25,6 +25,7 @@ def parse_experiment_path(path: Path) -> Dict[str, str]:
     
     # Default values
     metadata = {
+        "dataset": None,
         "experiment_type": "federated",
         "setting": None,
         "alpha": None,
@@ -36,10 +37,13 @@ def parse_experiment_path(path: Path) -> Dict[str, str]:
     try:
         # Find the experiment root
         exp_idx = parts.index("experiments")
-        dataset_idx = exp_idx + 1  # VQA-RAD
+        dataset_idx = exp_idx + 1  # VQA-RAD or other dataset
         
         if dataset_idx >= len(parts):
             return metadata
+        
+        # Extract dataset name
+        metadata["dataset"] = parts[dataset_idx]
         
         # Extract setting (noniid, iid, centralized)
         if dataset_idx + 1 < len(parts):
@@ -261,6 +265,7 @@ def save_to_csv(results: List[Dict], output_path: Path):
     
     # Define column order
     columns = [
+        "dataset",
         "experiment_type",
         "setting",
         "alpha",
@@ -293,7 +298,7 @@ def save_to_csv(results: List[Dict], output_path: Path):
 def main():
     # Get project root
     script_dir = Path(__file__).parent
-    experiments_root = script_dir / "experiments" / "VQA-RAD"
+    experiments_root = script_dir / "experiments"
     
     if not experiments_root.exists():
         print(f"Error: Experiments directory not found: {experiments_root}")
@@ -301,8 +306,19 @@ def main():
     
     print(f"Scanning experiments directory: {experiments_root}")
     
-    # Collect all metrics
-    results = collect_all_metrics(experiments_root)
+    # Collect all metrics from all datasets
+    all_results = []
+    for dataset_dir in experiments_root.iterdir():
+        if not dataset_dir.is_dir():
+            continue
+        print(f"  Scanning dataset: {dataset_dir.name}")
+        results = collect_all_metrics(dataset_dir)
+        all_results.extend(results)
+    
+    results = all_results
+    
+    # Exclude Qwen2.5-VL-3B-Instruct
+    results = [r for r in results if r.get("model") != "Qwen2.5-VL-3B-Instruct"]
     
     if not results:
         print("No metrics found.")

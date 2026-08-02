@@ -115,3 +115,13 @@ set -euo pipefail
 # bash federated_code_smolvlm/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 3 --model_version smolvlm500
 # bash federated_code_smolvlm/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 4 --model_version smolvlm500
 # bash federated_code_smolvlm/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 5 --model_version smolvlm500
+
+
+# bash federated_code_smolvlm_slake/run_federated_pipeline_nomrag_nokd.sh --dataset Slake --setting noniid --alpha 0.1 --k 2 need to sclae up
+
+# With KD (6 steps)
+
+bash federated_code_qwen_slake/run_federated_pipeline_nomrag_kd.sh --dataset Slake --setting noniid --alpha 0.1 --k 2
+
+# Without KD (3 steps)
+bash federated_code_qwen_slake/run_federated_pipeline_nomrag_nokd.sh --dataset Slake --setting noniid --alpha 0.1 --k 2
