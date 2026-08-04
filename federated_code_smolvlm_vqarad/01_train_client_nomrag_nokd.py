@@ -780,13 +780,13 @@ def main():
                         help="Dirichlet alpha for noniid (e.g. 0.5, 0.1)")
     parser.add_argument("--k",       type=int,   default=3,
                         help="Total number of clients")
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolVLM-500M-Instruct",
                         help="VLM model name from HuggingFace")
-    parser.add_argument("--model_short", type=str, default="Qwen2.5-VL-3B-Instruct",
+    parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
 
     # ── Training hyperparams ─────────────────────────────────────────────────
-    parser.add_argument("--epochs",     type=int,   default=1)
+    parser.add_argument("--epochs",     type=int,   default=5)
     parser.add_argument("--batch_size", type=int,   default=1)
     parser.add_argument("--grad_accum", type=int,   default=2,
                         help="Gradient accumulation steps")

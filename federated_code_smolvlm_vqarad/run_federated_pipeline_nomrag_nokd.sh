@@ -3,10 +3,10 @@
 # run_federated_pipeline_nomrag_nokd.sh
 # Automated federated training pipeline with resume capability
 # Pipeline: No RAG without Knowledge Distillation
-# Steps: 01, 02, 04, 05, 06 (client training → fedavg → continue → final fedavg → validation)
+# Steps: 01-03 (client training → fedavg → validation)
 #
 # Usage:
-#   bash federated_code/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
+#   bash federated_code_smolvlm_vqarad/run_federated_pipeline_nomrag_nokd.sh --dataset VQA-RAD --setting noniid --alpha 0.1 --k 2
 #
 # The script checks for existing outputs before running each step, allowing
 # resumption from any point if interrupted (e.g., power failure).
@@ -19,7 +19,7 @@ DATASET="VQA-RAD"
 SETTING="noniid"
 ALPHA=0.1
 K=2
-MODE="04_train_client_continue_nomrag_nokd"
+MODE="01_train_client_nomrag_nokd"
 MODEL_VERSION="smolvlm500"  # Options: "2", "2.5", "smolvlm", "smolvlm500"
 
 # Set model based on version
@@ -97,7 +97,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --alpha ALPHA           Alpha for noniid (default: 0.1)"
             echo "  --k K                   Number of clients (default: 2)"
             echo "  --model_version VERSION  Model version: 2, 2.5, smolvlm, or smolvlm500 (default: smolvlm500)"
-            echo "  --mode MODE              Script name suffix (default: 04_train_client_continue_nomrag_nokd)"
+            echo "  --mode MODE              Script name suffix (default: 01_train_client_nomrag_nokd)"
             echo "  --model_name MODEL_NAME  VLM model name from HuggingFace (auto-set by model_version by default)"
             echo "  --model_short MODEL_SHORT Short model name for directory naming (auto-set by model_version by default)"
             echo "  --help                  Show this help message"
@@ -112,7 +112,7 @@ done
 
 # Base paths
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FEDERATED_CODE="$PROJECT_ROOT/federated_code_smolvlm"
+FEDERATED_CODE="$PROJECT_ROOT/federated_code_smolvlm_vqarad"
 EXPERIMENTS_DIR="$PROJECT_ROOT/experiments/$DATASET/$SETTING"
 if [ "$SETTING" = "noniid" ]; then
     EXPERIMENTS_DIR="$EXPERIMENTS_DIR/alpha_$ALPHA"
@@ -184,29 +184,29 @@ run_step() {
 }
 
 # ==============================================================================
-# STEP 01: Federated Client Training (1 epoch, no RAG without KD)
+# STEP 01: Federated Client Training (no RAG without KD)
 # ==============================================================================
 echo "=============================================================================="
-echo "STEP 01: Federated Client Training (no RAG without KD, 1 epoch)"
+echo "STEP 01: Federated Client Training (no RAG without KD)"
 echo "=============================================================================="
 
 # Check for specific client directories from step 01
-STEP01_CHECK_PATTERN="$CLIENTS_DIR/client_*_01_train_client_nomrag_nokd"
+STEP01_CHECK_PATTERN="$CLIENTS_DIR/client_*_${MODE}"
 STEP01_HAS_OUTPUT=$(ls -d $STEP01_CHECK_PATTERN 2>/dev/null | wc -l)
 if [ "$STEP01_HAS_OUTPUT" -gt 0 ]; then
-    echo "[RESUME] Federated Client Training (no RAG without KD, 1 epoch) already completed"
+    echo "[RESUME] Federated Client Training (no RAG without KD) already completed"
     echo "[RESUME] Found $STEP01_HAS_OUTPUT client directories matching pattern: $STEP01_CHECK_PATTERN"
-    echo "[RESUME] Skipping Federated Client Training (no RAG without KD, 1 epoch) (use --force to override)"
+    echo "[RESUME] Skipping Federated Client Training (no RAG without KD) (use --force to override)"
 else
-    echo "[START] Running Federated Client Training (no RAG without KD, 1 epoch)"
+    echo "[START] Running Federated Client Training (no RAG without KD)"
     echo ""
-    
+
     cd "$PROJECT_ROOT"
     if eval "uv run $FEDERATED_CODE/01_train_client_nomrag_nokd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
-        echo "[SUCCESS] Federated Client Training (no RAG without KD, 1 epoch) completed"
+        echo "[SUCCESS] Federated Client Training (no RAG without KD) completed"
         echo ""
     else
-        echo "[ERROR] Federated Client Training (no RAG without KD, 1 epoch) failed"
+        echo "[ERROR] Federated Client Training (no RAG without KD) failed"
         echo "[ERROR] Check log: $LOG_FILE"
         exit 1
     fi
@@ -215,55 +215,18 @@ fi
 # ==============================================================================
 # STEP 02: Federated Averaging
 # ==============================================================================
-STEP02_OUTPUT="$SERVER_DIR/global_adapter_01_train_client_nomrag_nokd"
-STEP02_CMD="uv run $FEDERATED_CODE/02_fedavg.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --mode 01_train_client_nomrag_nokd --model_short $MODEL_SHORT"
+STEP02_OUTPUT="$SERVER_DIR/global_adapter_${MODE}"
+STEP02_CMD="uv run $FEDERATED_CODE/02_fedavg.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --mode $MODE --model_short $MODEL_SHORT"
 
 run_step "02" "Federated Averaging" "$STEP02_CMD" "$STEP02_OUTPUT"
 
 # ==============================================================================
-# STEP 04: Continue Training on VQA-RAD (5 epochs, no RAG without KD)
+# STEP 03: Final Validation
 # ==============================================================================
-echo "=============================================================================="
-echo "STEP 04: Continue Training on VQA-RAD (no RAG without KD, 5 epochs)"
-echo "=============================================================================="
+STEP03_OUTPUT="$EXPERIMENTS_DIR/final_val_${MODE}"
+STEP03_CMD="uv run $FEDERATED_CODE/06_val_final_nomrag_nokd.py --mode $MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
 
-# Check for specific client directories from step 04
-STEP04_CHECK_PATTERN="$CLIENTS_DIR/client_*_04_train_client_continue_nomrag_nokd"
-STEP04_HAS_OUTPUT=$(ls -d $STEP04_CHECK_PATTERN 2>/dev/null | wc -l)
-if [ "$STEP04_HAS_OUTPUT" -gt 0 ]; then
-    echo "[RESUME] Continue Training (no RAG without KD, 5 epochs) already completed"
-    echo "[RESUME] Found $STEP04_HAS_OUTPUT client directories matching pattern: $STEP04_CHECK_PATTERN"
-    echo "[RESUME] Skipping Continue Training (no RAG without KD, 5 epochs) (use --force to override)"
-else
-    echo "[START] Running Continue Training (no RAG without KD, 5 epochs)"
-    echo ""
-    
-    cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/04_train_client_continue_nomrag_nokd.py --mode 04_train_client_continue_nomrag_nokd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
-        echo "[SUCCESS] Continue Training (no RAG without KD, 5 epochs) completed"
-        echo ""
-    else
-        echo "[ERROR] Continue Training (no RAG without KD, 5 epochs) failed"
-        echo "[ERROR] Check log: $LOG_FILE"
-        exit 1
-    fi
-fi
-
-# ==============================================================================
-# STEP 05: Final Federated Averaging
-# ==============================================================================
-STEP05_OUTPUT="$SERVER_DIR/global_adapter_04_train_client_continue_nomrag_nokd"
-STEP05_CMD="uv run $FEDERATED_CODE/05_fedavg_final_nomrag_nokd.py --mode 04_train_client_continue_nomrag_nokd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_short $MODEL_SHORT"
-
-run_step "05" "Final Federated Averaging" "$STEP05_CMD" "$STEP05_OUTPUT"
-
-# ==============================================================================
-# STEP 06: Final Validation
-# ==============================================================================
-STEP06_OUTPUT="$EXPERIMENTS_DIR/final_val_04_train_client_continue_nomrag_nokd"
-STEP06_CMD="uv run $FEDERATED_CODE/06_val_final_nomrag_nokd.py --mode 04_train_client_continue_nomrag_nokd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
-
-run_step "06" "Final Validation" "$STEP06_CMD" "$STEP06_OUTPUT"
+run_step "03" "Final Validation" "$STEP03_CMD" "$STEP03_OUTPUT"
 
 # ==============================================================================
 # Pipeline Complete
