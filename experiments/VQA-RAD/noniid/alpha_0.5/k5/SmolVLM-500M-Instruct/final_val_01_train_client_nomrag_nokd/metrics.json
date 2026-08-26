@@ -1,0 +1,21 @@
+{
+  "closed-ended": {
+    "n_samples": 251,
+    "Accuracy": 0.621514
+  },
+  "open-ended": {
+    "n_samples": 200,
+    "Accuracy": 0.265,
+    "Exact Match": 0.18,
+    "BLEU": 0.044227,
+    "ROUGE-L": 0.247992,
+    "BERTScore": 0.890016
+  },
+  "hallucination": {
+    "Hallucination Rate": 0.554324
+  },
+  "performance": {
+    "inference_time_s": 423.68,
+    "throughput_samples_per_sec": 1.06
+  }
+}

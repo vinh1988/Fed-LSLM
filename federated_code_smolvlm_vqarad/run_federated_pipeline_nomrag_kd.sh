@@ -109,7 +109,7 @@ done
 
 # Base paths
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FEDERATED_CODE="$PROJECT_ROOT/federated_code_smolvlm"
+FEDERATED_CODE="$PROJECT_ROOT/federated_code_smolvlm_vqarad"
 EXPERIMENTS_DIR="$PROJECT_ROOT/experiments/$DATASET/$SETTING"
 if [ "$SETTING" = "noniid" ]; then
     EXPERIMENTS_DIR="$EXPERIMENTS_DIR/alpha_$ALPHA"
@@ -190,16 +190,20 @@ echo "==========================================================================
 # Check for specific client directories from step 01
 STEP01_CHECK_PATTERN="$CLIENTS_DIR/client_*_01_train_client_nomrag_kd"
 STEP01_HAS_OUTPUT=$(ls -d $STEP01_CHECK_PATTERN 2>/dev/null | wc -l)
-if [ "$STEP01_HAS_OUTPUT" -gt 0 ]; then
+if [ "$STEP01_HAS_OUTPUT" -eq "$K" ]; then
     echo "[RESUME] Federated Client Training (No-RAG with KD, 1 epoch) already completed"
     echo "[RESUME] Found $STEP01_HAS_OUTPUT client directories matching pattern: $STEP01_CHECK_PATTERN"
     echo "[RESUME] Skipping Federated Client Training (No-RAG with KD, 1 epoch) (use --force to override)"
 else
     echo "[START] Running Federated Client Training (No-RAG with KD, 1 epoch)"
+    echo "[RESUME] Found $STEP01_HAS_OUTPUT/$K client directories - running training to complete missing clients"
     echo ""
-    
+
+    # Calculate resume_from: start from next missing client
+    RESUME_FROM=$((STEP01_HAS_OUTPUT + 1))
+
     cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/01_train_client_nomrag_kd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
+    if eval "uv run $FEDERATED_CODE/01_train_client_nomrag_kd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT --resume_from $RESUME_FROM"; then
         echo "[SUCCESS] Federated Client Training (No-RAG with KD, 1 epoch) completed"
         echo ""
     else
@@ -232,19 +236,23 @@ echo "==========================================================================
 echo "STEP 04: Continue Training on VQA-RAD"
 echo "=============================================================================="
 
-# Check for specific client directories from step 04
-STEP04_CHECK_PATTERN="$CLIENTS_DIR/client_*_${MODE}"
-STEP04_HAS_OUTPUT=$(ls -d $STEP04_CHECK_PATTERN 2>/dev/null | wc -l)
-if [ "$STEP04_HAS_OUTPUT" -gt 0 ]; then
+# Check for specific client directories from step 04 with adapter files
+STEP04_CHECK_PATTERN="$CLIENTS_DIR/client_*_${MODE}/adapter_model.safetensors"
+STEP04_HAS_OUTPUT=$(ls $STEP04_CHECK_PATTERN 2>/dev/null | wc -l)
+if [ "$STEP04_HAS_OUTPUT" -eq "$K" ]; then
     echo "[RESUME] Continue Training on VQA-RAD already completed"
-    echo "[RESUME] Found $STEP04_HAS_OUTPUT client directories matching pattern: $STEP04_CHECK_PATTERN"
+    echo "[RESUME] Found $STEP04_HAS_OUTPUT/$K client adapters matching pattern: $STEP04_CHECK_PATTERN"
     echo "[RESUME] Skipping Continue Training on VQA-RAD (use --force to override)"
 else
     echo "[START] Running Continue Training on VQA-RAD"
+    echo "[RESUME] Found $STEP04_HAS_OUTPUT/$K client adapters - running training to complete missing clients"
     echo ""
-    
+
+    # Calculate resume_from: start from next missing client
+    RESUME_FROM=$((STEP04_HAS_OUTPUT + 1))
+
     cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/04_train_client_continue_nomrag_kd.py --mode $MODE --roco_slake_mode $VQARAD_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
+    if eval "uv run $FEDERATED_CODE/04_train_client_continue_nomrag_kd.py --mode $MODE --roco_slake_mode $VQARAD_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT --resume_from $RESUME_FROM"; then
         echo "[SUCCESS] Continue Training on VQA-RAD completed"
         echo ""
     else

@@ -365,6 +365,8 @@ def main():
                         help="Short model name for directory naming")
     parser.add_argument("--global_adapter_vqarad", type=str, default=None,
                         help="Path to global adapter from VQA-RAD training (auto-generated if not provided)")
+    parser.add_argument("--resume_from", type=int, default=None,
+                        help="Resume training from a specific client ID (1-indexed)")
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--grad_accum", type=int, default=8)
@@ -385,8 +387,11 @@ def main():
         args.global_adapter_vqarad = str(base / f"global_adapter_vqarad_{args.roco_slake_mode}")
 
     set_seed(args.seed)
-    
+
+    start_cid = args.resume_from if args.resume_from is not None else 1
     log("Starting VQA-RAD continued training for ALL clients...")
+    if args.resume_from is not None:
+        log(f"[RESUME] Starting from client {start_cid}")
     log(f"VQA-RAD adapter: {args.global_adapter_vqarad}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -443,7 +448,7 @@ def main():
     rouge_scr = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
 
     # 4. Loop over clients
-    for client_id in range(1, args.k + 1):
+    for client_id in range(start_cid, args.k + 1):
         log(f"{'='*60}")
         log(f"  CLIENT {client_id}/{args.k}  ({args.setting}, k={args.k})")
         log(f"{'='*60}")
@@ -516,16 +521,20 @@ def main():
             gpu_mem_readings_gb.append(sample_gpu_memory_gb())
 
             log(f"[Client {client_id}] Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
-            
-            # Eval at end of epoch
-            metrics = evaluate_model(model, processor, test_df, Path(image_root), rouge_scr, device, desc=f"Eval Epoch {epoch}")
-            log(f"[Client {client_id}] Epoch {epoch} | Closed Acc={metrics['closed-ended']['Accuracy']:.4f} | Open ROUGE-L={metrics['open-ended']['ROUGE-L']:.4f}")
-            
-            if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
-                best_closed_acc = metrics["closed-ended"]["Accuracy"]
-                best_epoch = epoch
-                log(f"[Client {client_id}] New best Closed Acc = {best_closed_acc:.4f}. Saving best adapter...")
-                model.save_pretrained(out_dir)
+
+            # Eval at end of epoch (disabled - only validate at final step)
+            # metrics = evaluate_model(model, processor, test_df, Path(image_root), rouge_scr, device, desc=f"Eval Epoch {epoch}")
+            # log(f"[Client {client_id}] Epoch {epoch} | Closed Acc={metrics['closed-ended']['Accuracy']:.4f} | Open ROUGE-L={metrics['open-ended']['ROUGE-L']:.4f}")
+
+            # if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
+            #     best_closed_acc = metrics["closed-ended"]["Accuracy"]
+            #     best_epoch = epoch
+            #     log(f"[Client {client_id}] New best Closed Acc = {best_closed_acc:.4f}. Saving best adapter...")
+            #     model.save_pretrained(out_dir)
+
+        # Save final adapter after all epochs
+        log(f"[Client {client_id}] Saving final adapter to {out_dir}")
+        model.save_pretrained(out_dir)
 
         t_end = time.time()
         total_s = t_end - t_start

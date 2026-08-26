@@ -21,6 +21,7 @@ ALPHA=0.1
 K=2
 MODE="01_train_client_nomrag_nokd"  # Mode for client training
 MODEL_VERSION="2"  # Options: "2", "2.5", or "smolvlm500"
+RESUME_FROM=""  # Resume training from this client ID (1-indexed)
 
 # Set model based on version
 if [ "$MODEL_VERSION" = "2" ]; then
@@ -78,6 +79,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --model_short)
             MODEL_SHORT="$2"
+            shift 2
+            ;;
+        --resume_from)
+            RESUME_FROM="$2"
             shift 2
             ;;
         --help)
@@ -184,7 +189,10 @@ echo "==========================================================================
 # Check for specific client directories from step 01
 STEP01_CHECK_PATTERN="$CLIENTS_DIR/client_*_${MODE}"
 STEP01_HAS_OUTPUT=$(ls -d $STEP01_CHECK_PATTERN 2>/dev/null | wc -l)
-if [ "$STEP01_HAS_OUTPUT" -gt 0 ]; then
+
+# If resume_from is specified, always run training (let Python script handle resume logic)
+# Otherwise, skip if all k clients are already trained
+if [ -z "$RESUME_FROM" ] && [ "$STEP01_HAS_OUTPUT" -ge "$K" ]; then
     echo "[RESUME] Federated Client Training (No-RAG, No-KD, 1 epoch) already completed"
     echo "[RESUME] Found $STEP01_HAS_OUTPUT client directories matching pattern: $STEP01_CHECK_PATTERN"
     echo "[RESUME] Skipping Federated Client Training (No-RAG, No-KD, 1 epoch) (use --force to override)"
@@ -193,7 +201,11 @@ else
     echo ""
     
     cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/01_train_client_nomrag_nokd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
+    TRAIN_CMD="uv run $FEDERATED_CODE/01_train_client_nomrag_nokd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
+    if [ -n "$RESUME_FROM" ]; then
+        TRAIN_CMD="$TRAIN_CMD --resume_from $RESUME_FROM"
+    fi
+    if eval "$TRAIN_CMD"; then
         echo "[SUCCESS] Federated Client Training (No-RAG, No-KD, 1 epoch) completed"
         echo ""
     else

@@ -1,0 +1,23 @@
+{
+  "dataset": "VQA-RAD",
+  "setting": "noniid",
+  "alpha": 0.5,
+  "k": 5,
+  "client_id": 2,
+  "model": "SmolVLM-500M-Instruct",
+  "epochs": 1,
+  "lr": 0.0002,
+  "batch_size": 1,
+  "grad_accum": 8,
+  "seed": 42,
+  "num_train_samples": 249,
+  "num_test_samples": 451,
+  "best_epoch": -1,
+  "best_metrics": {
+    "note": "Best metrics not tracked during training - computed at final step"
+  },
+  "avg_metrics": {
+    "avg_train_loss": 3.047618,
+    "note": "Validation disabled during training - metrics computed at final step"
+  }
+}

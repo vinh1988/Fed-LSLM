@@ -536,16 +536,20 @@ def main():
             gpu_mem_readings_gb.append(sample_gpu_memory_gb())
 
             log(f"[Client {client_id}] Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
-            
-            # Eval at end of epoch
-            metrics = evaluate_model(model, processor, test_df, Path(image_root), rouge_scr, device, desc=f"Eval Epoch {epoch}")
-            log(f"[Client {client_id}] Epoch {epoch} | Closed Acc={metrics['closed-ended']['Accuracy']:.4f} | Open ROUGE-L={metrics['open-ended']['ROUGE-L']:.4f}")
-            
-            if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
-                best_closed_acc = metrics["closed-ended"]["Accuracy"]
-                best_epoch = epoch
-                log(f"[Client {client_id}] New best Closed Acc = {best_closed_acc:.4f}. Saving best adapter...")
-                model.save_pretrained(out_dir)
+
+            # Eval at end of epoch (disabled - only validate at final step)
+            # metrics = evaluate_model(model, processor, test_df, Path(image_root), rouge_scr, device, desc=f"Eval Epoch {epoch}")
+            # log(f"[Client {client_id}] Epoch {epoch} | Closed Acc={metrics['closed-ended']['Accuracy']:.4f} | Open ROUGE-L={metrics['open-ended']['ROUGE-L']:.4f}")
+
+            # if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
+            #     best_closed_acc = metrics["closed-ended"]["Accuracy"]
+            #     best_epoch = epoch
+            #     log(f"[Client {client_id}] New best Closed Acc = {best_closed_acc:.4f}. Saving best adapter...")
+            #     model.save_pretrained(out_dir)
+
+        # Save final adapter after all epochs
+        log(f"[Client {client_id}] Saving final adapter to {out_dir}")
+        model.save_pretrained(out_dir)
 
         t_end = time.time()
         total_s = t_end - t_start

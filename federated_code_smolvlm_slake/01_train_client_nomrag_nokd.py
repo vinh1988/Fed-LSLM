@@ -752,7 +752,9 @@ def main():
                         help="Gradient accumulation steps")
     parser.add_argument("--lr",         type=float, default=2e-4)
     parser.add_argument("--seed",       type=int,   default=42)
-    parser.add_argument("--max_length", type=int,   default=512)
+    parser.add_argument("--max_length", type=int, default=512)
+    parser.add_argument("--resume_from", type=int, default=None,
+                        help="Resume training from this client ID (1-indexed)")
 
     args = parser.parse_args()
 
@@ -763,12 +765,15 @@ def main():
     log(f"Starting sequential training for ALL {args.k} clients.")
     log(f"Dataset={args.dataset}  setting={args.setting}  "
         f"alpha={args.alpha}  k={args.k}  epochs={args.epochs}")
+    if args.resume_from:
+        log(f"Resuming from client {args.resume_from}")
     log("")
 
     total_start = time.time()
     results     = []
 
-    for cid in range(1, args.k + 1):
+    start_cid = args.resume_from if args.resume_from else 1
+    for cid in range(start_cid, args.k + 1):
         out = train_single_client(args, client_id=cid)
         results.append((cid, out))
 
