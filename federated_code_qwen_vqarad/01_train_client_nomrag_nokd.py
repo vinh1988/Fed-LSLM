@@ -598,74 +598,58 @@ def train_single_client(args, client_id: int):
 
         log(f"Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
 
-        # ── Evaluate ─────────────────────────────────────────────────────────
-        metrics, predictions = evaluate_model(
-            model, processor, test_df,
-            image_root, rouge_scr, device,
-            desc=f"[Client {client_id}] Eval Epoch {epoch}",
-        )
-        c = metrics["closed-ended"]
-        o = metrics["open-ended"]
-        log(f"Epoch {epoch} | "
-            f"Closed [n={c['n_samples']}] Acc={c['Accuracy']:.4f} | "
-            f"Open   [n={o['n_samples']}] Acc={o['Accuracy']:.4f} BLEU={o['BLEU']:.4f} ROUGE-L={o['ROUGE-L']:.4f}")
+        # ── Evaluate (disabled - only validate at final step) ─────────────────
+        # metrics, predictions = evaluate_model(
+        #     model, processor, test_df,
+        #     image_root, rouge_scr, device,
+        #     desc=f"[Client {client_id}] Eval Epoch {epoch}",
+        # )
+        # c = metrics["closed-ended"]
+        # o = metrics["open-ended"]
+        # log(f"Epoch {epoch} | "
+        #     f"Closed [n={c['n_samples']}] Acc={c['Accuracy']:.4f} | "
+        #     f"Open   [n={o['n_samples']}] Acc={o['Accuracy']:.4f} BLEU={o['BLEU']:.4f} ROUGE-L={o['ROUGE-L']:.4f}")
 
-        all_metrics.append(metrics)
+        # all_metrics.append(metrics)
 
         # ── Save best model (criterion: closed accuracy) ─────────────────────
-        if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
-            best_closed_acc = metrics["closed-ended"]["Accuracy"]
-            best_epoch      = epoch
-            best_metrics    = metrics
-            log(f"New best Closed Acc={best_closed_acc:.4f}  -> saving adapter to {out_dir}")
-            model.save_pretrained(out_dir)
+        # if metrics["closed-ended"]["Accuracy"] > best_closed_acc:
+        #     best_closed_acc = metrics["closed-ended"]["Accuracy"]
+        #     best_epoch      = epoch
+        #     best_metrics    = metrics
+        #     log(f"New best Closed Acc={best_closed_acc:.4f}  -> saving adapter to {out_dir}")
+        #     model.save_pretrained(out_dir)
 
-            pred_df = test_df.copy()
-            pred_df["prediction"] = predictions
-            pred_df["closed_correct"] = [
-                compute_exact_match(p, str(r.answer))
-                if str(r.question_type).lower() == "closed" else None
-                for p, r in zip(predictions, test_df.itertuples())
-            ]
-            pred_df["open_bleu"] = [
-                compute_bleu(p, str(r.answer))
-                if str(r.question_type).lower() == "open" else None
-                for p, r in zip(predictions, test_df.itertuples())
-            ]
-            pred_df.to_csv(out_dir / "best_predictions.csv", index=False)
+        #     pred_df = test_df.copy()
+        #     pred_df["prediction"] = predictions
+        #     pred_df["closed_correct"] = [
+        #         compute_exact_match(p, str(r.answer))
+        #         if str(r.question_type).lower() == "closed" else None
+        #         for p, r in zip(predictions, test_df.itertuples())
+        #     ]
+        #     pred_df["open_bleu"] = [
+        #         compute_bleu(p, str(r.answer))
+        #         if str(r.question_type).lower() == "open" else None
+        #         for p, r in zip(predictions, test_df.itertuples())
+        #     ]
+        #     pred_df.to_csv(out_dir / "best_predictions.csv", index=False)
+
+    # ── Save final adapter after all epochs ───────────────────────────────────
+    log(f"Saving final adapter to {out_dir}")
+    model.save_pretrained(out_dir)
 
     # ── Step 7: Save JSON artifacts ──────────────────────────────────────────
     t_end   = time.time()
     dt_end  = datetime.datetime.now().isoformat()
     total_s = t_end - t_start
 
+    # Metrics will be computed at final validation step
     avg_metrics_payload = {
         "avg_train_loss": round(float(np.mean(all_losses)), 6),
-        "closed-ended": {
-            "n_samples": int(np.mean([m["closed-ended"]["n_samples"] for m in all_metrics])),
-            "Accuracy": round(float(np.mean([m["closed-ended"]["Accuracy"] for m in all_metrics])), 6),
-        },
-        "open-ended": {
-            "n_samples": int(np.mean([m["open-ended"]["n_samples"] for m in all_metrics])),
-            "Accuracy":    round(float(np.mean([m["open-ended"]["Accuracy"]    for m in all_metrics])), 6),
-            "Exact Match": round(float(np.mean([m["open-ended"]["Exact Match"] for m in all_metrics])), 6),
-            "BLEU":        round(float(np.mean([m["open-ended"]["BLEU"]        for m in all_metrics])), 6),
-            "ROUGE-L":     round(float(np.mean([m["open-ended"]["ROUGE-L"]     for m in all_metrics])), 6),
-            "BERTScore":   0.0,  # Placeholder - compute post-hoc
-        },
-        "hallucination": {
-            "Hallucination Rate": round(float(np.mean([m["hallucination"]["Hallucination Rate"] for m in all_metrics])), 6),
-        },
-        "performance": {
-            "inference_time_s": round(float(np.mean([m["performance"]["inference_time_s"] for m in all_metrics])), 3),
-            "throughput_samples_per_sec": round(float(np.mean([m["performance"]["throughput_samples_per_sec"] for m in all_metrics])), 3),
-        },
+        "note": "Validation disabled during training - metrics computed at final step",
     }
     best_metrics_payload = {
-        "closed-ended": best_metrics.get("closed-ended", {}),
-        "open-ended":   best_metrics.get("open-ended",   {}),
-        "hallucination": best_metrics.get("hallucination", {}),
-        "performance":   best_metrics.get("performance",   {}),
+        "note": "Best metrics not tracked during training - computed at final step",
     }
 
     experiment_payload = {
