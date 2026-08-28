@@ -93,7 +93,7 @@ class UnifiedReasoningDataset(Dataset):
     def __init__(self, df_roco=None, df_slake=None, roco_image_root=None, slake_image_root=None):
         """
         Unified dataset for ROCO (caption-based) and Slake (QA-based) reasoning.
-        
+
         Args:
             df_roco: ROCO DataFrame with columns: image_id, caption, reasoning
             df_slake: Slake DataFrame with columns: img_id, img_name, question, answer, reasoning
@@ -101,21 +101,37 @@ class UnifiedReasoningDataset(Dataset):
             slake_image_root: Path to Slake images (extracted imgs.zip)
         """
         self.samples = []
-        
+
         # Add ROCO samples
         if df_roco is not None and roco_image_root is not None:
-            df_roco = df_roco.dropna(subset=['image_id']).reset_index(drop=True)
-            for _, row in df_roco.iterrows():
-                image_id = row["image_id"]
-                numeric_id = image_id.split("_")[-1]
-                image_path = Path(roco_image_root) / f"{numeric_id}.jpg"
-                self.samples.append({
-                    "type": "roco",
-                    "image_path": image_path,
-                    "caption": row["caption"],
-                    "reasoning": row["reasoning"],
-                })
-        
+            # Check which column name is available
+            if 'image_id' in df_roco.columns:
+                df_roco = df_roco.dropna(subset=['image_id']).reset_index(drop=True)
+                for _, row in df_roco.iterrows():
+                    image_id = row["image_id"]
+                    numeric_id = image_id.split("_")[-1]
+                    image_path = Path(roco_image_root) / f"{numeric_id}.jpg"
+                    self.samples.append({
+                        "type": "roco",
+                        "image_path": image_path,
+                        "caption": row["caption"],
+                        "reasoning": row["reasoning"],
+                    })
+            elif 'image_name' in df_roco.columns:
+                df_roco = df_roco.dropna(subset=['image_name']).reset_index(drop=True)
+                for _, row in df_roco.iterrows():
+                    image_name = row["image_name"]
+                    image_path = Path(roco_image_root) / image_name
+                    caption = row.get("caption", row.get("question", ""))
+                    self.samples.append({
+                        "type": "roco",
+                        "image_path": image_path,
+                        "caption": caption,
+                        "reasoning": row.get("reasoning", ""),
+                    })
+            else:
+                log(f"Warning: ROCO CSV missing expected columns. Available: {list(df_roco.columns)}")
+
         # Add Slake samples
         if df_slake is not None and slake_image_root is not None:
             df_slake = df_slake.dropna(subset=['img_name']).reset_index(drop=True)
@@ -129,7 +145,7 @@ class UnifiedReasoningDataset(Dataset):
                     "answer": row["answer"],
                     "reasoning": row["reasoning"],
                 })
-        
+
         log(f"Loaded {len(self.samples)} total samples (ROCO: {sum(1 for s in self.samples if s['type']=='roco')}, Slake: {sum(1 for s in self.samples if s['type']=='slake')})")
 
     def __len__(self):
@@ -397,7 +413,7 @@ def main():
     if args.out_dir is None:
         args.out_dir = str(base / f"global_adapter_roco_slake_{args.mode}")
     if args.roco_csv is None:
-        args.roco_csv = str(data_root / "ROCO" / "roco_reasoning_train.csv")
+        args.roco_csv = str(data_root / "ROCO" / "roco_reasoning_train_fixed.csv")
     if args.roco_image_root is None:
         args.roco_image_root = str(data_root / "ROCO" / "train" / "images")
     if args.slake_csv is None:

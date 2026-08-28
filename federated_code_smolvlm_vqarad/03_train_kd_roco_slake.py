@@ -86,31 +86,74 @@ def sample_gpu_memory_gb() -> float:
 # Dataset & collate
 # ──────────────────────────────────────────────────────────────────────────────
 
-class VQARADDataset(Dataset):
-    def __init__(self, df_vqarad=None, vqarad_image_root=None):
+class KDDataset(Dataset):
+    def __init__(self, main_dataset, df_roco=None, roco_image_root=None,
+                 df_slake=None, slake_image_root=None,
+                 df_vqarad=None, vqarad_image_root=None):
         """
-        VQA-RAD dataset for continued training.
-        
+        Knowledge Distillation dataset combining ROCO and Slake/VQA-RAD.
+
         Args:
-            df_vqarad: VQA-RAD DataFrame with columns: image_path, question, answer, question_type
+            main_dataset: Main dataset being trained on ("VQA-RAD" or "Slake")
+            df_roco: ROCO DataFrame (open-ended questions)
+            roco_image_root: Path to ROCO images
+            df_slake: Slake DataFrame (closed-ended questions)
+            slake_image_root: Path to Slake images
+            df_vqarad: VQA-RAD DataFrame (closed-ended questions)
             vqarad_image_root: Path to VQA-RAD images
         """
         self.samples = []
-        
-        # Add VQA-RAD samples
-        if df_vqarad is not None and vqarad_image_root is not None:
-            df_vqarad = df_vqarad.dropna(subset=['image_path']).reset_index(drop=True)
-            for _, row in df_vqarad.iterrows():
+
+        # Always load ROCO for open-ended questions
+        if df_roco is not None and roco_image_root is not None:
+            # ROCO CSV has columns: image_name, caption (not image_path, question, answer)
+            if 'image_name' in df_roco.columns:
+                df_roco = df_roco.dropna(subset=['image_name']).reset_index(drop=True)
+                for _, row in df_roco.iterrows():
+                    image_path = Path(roco_image_root) / row["image_name"]
+                    caption = row["caption"]
+                    self.samples.append({
+                        "type": "roco",
+                        "image_path": image_path,
+                        "question": caption,  # Use caption as question
+                        "answer": caption,     # Use caption as answer
+                       "question_type": "open",  # ROCO is open-ended
+                    })
+                log(f"Loaded {len(df_roco)} ROCO samples (open-ended)")
+            else:
+                log(f"Warning: ROCO CSV missing 'image_name' column. Available columns: {list(df_roco.columns)}")
+
+        # Load Slake for closed-ended if main dataset is VQA-RAD
+        if main_dataset == "VQA-RAD" and df_slake is not None and slake_image_root is not None:
+            # Filter Slake for closed-ended questions only
+            df_slake_closed = df_slake[df_slake['question_type'].str.lower() == 'closed'].reset_index(drop=True)
+            for _, row in df_slake_closed.iterrows():
+                image_path = Path(slake_image_root) / row["image_path"]
+                self.samples.append({
+                    "type": "slake",
+                    "image_path": image_path,
+                    "question": row["question"],
+                    "answer": row["answer"],
+                    "question_type": "closed",
+                })
+            log(f"Loaded {len(df_slake_closed)} Slake samples (closed-ended)")
+
+        # Load VQA-RAD for closed-ended if main dataset is Slake
+        if main_dataset == "Slake" and df_vqarad is not None and vqarad_image_root is not None:
+            # Filter VQA-RAD for closed-ended questions only
+            df_vqarad_closed = df_vqarad[df_vqarad['question_type'].str.lower() == 'closed'].reset_index(drop=True)
+            for _, row in df_vqarad_closed.iterrows():
                 image_path = Path(vqarad_image_root) / row["image_path"]
                 self.samples.append({
                     "type": "vqarad",
                     "image_path": image_path,
                     "question": row["question"],
                     "answer": row["answer"],
-                    "question_type": row.get("question_type", "open"),
+                    "question_type": "closed",
                 })
-        
-        log(f"Loaded {len(self.samples)} VQA-RAD samples")
+            log(f"Loaded {len(df_vqarad_closed)} VQA-RAD samples (closed-ended)")
+
+        log(f"Total KD samples: {len(self.samples)}")
 
     def __len__(self):
         return len(self.samples)
@@ -348,7 +391,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, required=True,
                         help="Script name suffix from federated training (e.g., 01_train_client_mrag_kd)")
-    parser.add_argument("--dataset", type=str, default="VQA-RAD")
+    parser.add_argument("--dataset", type=str, default="VQA-RAD", choices=["VQA-RAD", "Slake"],
+                        help="Main dataset being trained on")
     parser.add_argument("--setting", type=str, choices=["iid", "noniid"], default="noniid")
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--k", type=int, default=2)
@@ -357,13 +401,17 @@ def main():
     parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
     parser.add_argument("--global_adapter", type=str, default=None, help="Path to server/global_adapter (auto-generated if not provided)")
+    parser.add_argument("--roco_csv", type=str, default=None, help="Path to ROCO train CSV (auto-generated if not provided)")
+    parser.add_argument("--roco_image_root", type=str, default=None, help="Path to ROCO images (auto-generated if not provided)")
+    parser.add_argument("--slake_csv", type=str, default=None, help="Path to Slake train CSV (auto-generated if not provided)")
+    parser.add_argument("--slake_image_root", type=str, default=None, help="Path to Slake images (auto-generated if not provided)")
     parser.add_argument("--vqarad_csv", type=str, default=None, help="Path to VQA-RAD train CSV (auto-generated if not provided)")
     parser.add_argument("--vqarad_image_root", type=str, default=None, help="Path to VQA-RAD images (auto-generated if not provided)")
     parser.add_argument("--out_dir", type=str, default=None, help="Output directory (auto-generated if not provided)")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=1)
-    parser.add_argument("--test_csv", type=str, default=None, help="Path to VQA-RAD test CSV (auto-generated if not provided)")
-    parser.add_argument("--image_root", type=str, default=None, help="Path to VQA-RAD images (auto-generated if not provided)")
+    parser.add_argument("--test_csv", type=str, default=None, help="Path to test CSV (auto-generated if not provided)")
+    parser.add_argument("--image_root", type=str, default=None, help="Path to test images (auto-generated if not provided)")
     parser.add_argument("--grad_accum", type=int, default=8)
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--seed", type=int, default=42)
@@ -374,45 +422,78 @@ def main():
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
     base = base / f"k{args.k}" / args.model_short / "server"
-    
+
     data_root = Path("processed_data")
-    
+
     if args.global_adapter is None:
         args.global_adapter = str(base / f"global_adapter_{args.mode}")
     if args.out_dir is None:
-        args.out_dir = str(base / f"global_adapter_vqarad_{args.mode}")
+        # Use vqarad instead of vqa-rad for consistency
+        dataset_name = "vqarad" if args.dataset == "VQA-RAD" else args.dataset.lower()
+        args.out_dir = str(base / f"global_adapter_{dataset_name}_{args.mode}")
+
+    # Auto-generate KD dataset paths
+    if args.roco_csv is None:
+        args.roco_csv = str(data_root / "ROCO" / "roco_reasoning_train_fixed.csv")
+    if args.roco_image_root is None:
+        args.roco_image_root = str(data_root / "ROCO" / "train" / "images")
+
+    if args.slake_csv is None:
+        args.slake_csv = str(data_root / "Slake" / "centralized" / "train.csv")
+    if args.slake_image_root is None:
+        args.slake_image_root = str(data_root / "Slake" / "centralized")
+
     if args.vqarad_csv is None:
         args.vqarad_csv = str(data_root / "VQA-RAD" / "centralized" / "train.csv")
     if args.vqarad_image_root is None:
         args.vqarad_image_root = str(data_root / "VQA-RAD" / "centralized")
+
+    # Test set paths (use main dataset for evaluation)
     if args.test_csv is None:
-        args.test_csv = str(data_root / "VQA-RAD" / "centralized" / "test.csv")
+        args.test_csv = str(data_root / args.dataset / "centralized" / "test.csv")
     if args.image_root is None:
-        args.image_root = str(data_root / "VQA-RAD" / "centralized")
+        args.image_root = str(data_root / args.dataset / "centralized")
 
     set_seed(args.seed)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    
-    log(f"Starting VQA-RAD continued training")
+
+    log(f"Starting Knowledge Distillation for {args.dataset}")
     log(f"Global adapter: {args.global_adapter}")
-    log(f"VQA-RAD CSV: {args.vqarad_csv}")
     log(f"Output directory: {out_dir}")
+    log(f"Main dataset: {args.dataset}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     gpu_static = get_gpu_static_info()
     log(f"Device: {device} | GPU: {gpu_static['gpu_name']} | VRAM: {gpu_static['total_vram_gb']} GB")
 
     # 1. Load Data
-    log("Loading VQA-RAD dataset...")
-    
-    # Load VQA-RAD
+    log("Loading KD datasets...")
+
+    # Load ROCO (always for open-ended)
+    df_roco = None
+    if args.roco_csv and Path(args.roco_csv).exists():
+        df_roco = pd.read_csv(args.roco_csv)
+        log(f"Loaded ROCO: {len(df_roco)} samples")
+
+    # Load Slake (for closed-ended when main dataset is VQA-RAD)
+    df_slake = None
+    if args.slake_csv and Path(args.slake_csv).exists():
+        df_slake = pd.read_csv(args.slake_csv)
+        log(f"Loaded Slake: {len(df_slake)} samples")
+
+    # Load VQA-RAD (for closed-ended when main dataset is Slake)
     df_vqarad = None
     if args.vqarad_csv and Path(args.vqarad_csv).exists():
         df_vqarad = pd.read_csv(args.vqarad_csv)
         log(f"Loaded VQA-RAD: {len(df_vqarad)} samples")
-    
-    train_dataset = VQARADDataset(
+
+    train_dataset = KDDataset(
+        main_dataset=args.dataset,
+        df_roco=df_roco,
+        roco_image_root=args.roco_image_root,
+        df_slake=df_slake,
+        slake_image_root=args.slake_image_root,
         df_vqarad=df_vqarad,
         vqarad_image_root=args.vqarad_image_root
     )
@@ -515,8 +596,8 @@ def main():
 
         log(f"Epoch {epoch} done — avg_loss={avg_loss:.4f}  time={epoch_time:.1f}s")
     
-    # 6. Evaluate Zero-Shot on VQA-RAD
-    log("Running zero-shot evaluation on VQA-RAD test set...")
+    # 6. Evaluate Zero-Shot on main dataset test set
+    log(f"Running zero-shot evaluation on {args.dataset} test set...")
     test_df = pd.read_csv(args.test_csv)
     rouge_scr = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
     best_metrics = evaluate_model_zeroshot(
@@ -559,8 +640,12 @@ def main():
         json.dump(time_payload, f, indent=2)
         
     experiment_payload = {
-        "dataset": "VQA-RAD",
-        "vqarad_samples": len(df_vqarad) if df_vqarad is not None else 0,
+        "dataset": args.dataset,
+        "kd_datasets": {
+            "roco_samples": len(df_roco) if df_roco is not None else 0,
+            "slake_samples": len(df_slake) if df_slake is not None else 0,
+            "vqarad_samples": len(df_vqarad) if df_vqarad is not None else 0,
+        },
         "total_samples": len(train_dataset),
         "epochs": args.epochs,
         "batch_size": args.batch_size,
