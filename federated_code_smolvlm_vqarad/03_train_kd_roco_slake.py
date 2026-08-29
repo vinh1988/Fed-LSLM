@@ -125,10 +125,10 @@ class KDDataset(Dataset):
 
         # Load Slake for closed-ended if main dataset is VQA-RAD
         if main_dataset == "VQA-RAD" and df_slake is not None and slake_image_root is not None:
-            # Filter Slake for closed-ended questions only
-            df_slake_closed = df_slake[df_slake['question_type'].str.lower() == 'closed'].reset_index(drop=True)
-            for _, row in df_slake_closed.iterrows():
-                image_path = Path(slake_image_root) / row["image_path"]
+            # slake_closed_reasoning.csv is already pre-filtered for closed-ended questions
+            df_slake = df_slake.dropna(subset=['img_name']).reset_index(drop=True)
+            for _, row in df_slake.iterrows():
+                image_path = Path(slake_image_root) / "imgs" / row["img_name"]
                 self.samples.append({
                     "type": "slake",
                     "image_path": image_path,
@@ -136,7 +136,7 @@ class KDDataset(Dataset):
                     "answer": row["answer"],
                     "question_type": "closed",
                 })
-            log(f"Loaded {len(df_slake_closed)} Slake samples (closed-ended)")
+            log(f"Loaded {len(df_slake)} Slake samples (closed-ended)")
 
         # Load VQA-RAD for closed-ended if main dataset is Slake
         if main_dataset == "Slake" and df_vqarad is not None and vqarad_image_root is not None:
@@ -439,9 +439,9 @@ def main():
         args.roco_image_root = str(data_root / "ROCO" / "train" / "images")
 
     if args.slake_csv is None:
-        args.slake_csv = str(data_root / "Slake" / "centralized" / "train.csv")
+        args.slake_csv = str(data_root / "Slake" / "slake_closed_reasoning.csv")
     if args.slake_image_root is None:
-        args.slake_image_root = str(data_root / "Slake" / "centralized")
+        args.slake_image_root = str(data_root / "Slake" / "images")
 
     if args.vqarad_csv is None:
         args.vqarad_csv = str(data_root / "VQA-RAD" / "centralized" / "train.csv")

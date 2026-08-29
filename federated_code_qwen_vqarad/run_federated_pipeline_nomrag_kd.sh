@@ -103,7 +103,7 @@ done
 
 # Base paths
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FEDERATED_CODE="$PROJECT_ROOT/federated_code"
+FEDERATED_CODE="$PROJECT_ROOT/federated_code_qwen_vqarad"
 EXPERIMENTS_DIR="$PROJECT_ROOT/experiments/$DATASET/$SETTING"
 if [ "$SETTING" = "noniid" ]; then
     EXPERIMENTS_DIR="$EXPERIMENTS_DIR/alpha_$ALPHA"

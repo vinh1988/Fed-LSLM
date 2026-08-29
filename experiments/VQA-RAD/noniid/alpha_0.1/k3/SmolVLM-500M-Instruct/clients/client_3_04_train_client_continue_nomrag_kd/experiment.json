@@ -7,12 +7,12 @@
   "epochs": 5,
   "batch_size": 1,
   "lr": 0.0002,
-  "avg_train_loss": 0.1427,
-  "best_closed_acc": 0.6773,
-  "best_epoch": 1,
+  "avg_train_loss": 0.1474,
+  "best_closed_acc": -1.0,
+  "best_epoch": -1,
   "best_metrics": {
     "closed-ended": {
-      "Accuracy": 0.6773
+      "Accuracy": -1.0
     },
     "open-ended": {
       "Accuracy": 0.0,

@@ -1,0 +1,34 @@
+{
+  "dataset": "VQA-RAD",
+  "kd_datasets": {
+    "roco_samples": 1544,
+    "slake_samples": 1000,
+    "vqarad_samples": 1793
+  },
+  "total_samples": 2021,
+  "epochs": 1,
+  "batch_size": 1,
+  "lr": 2e-05,
+  "avg_train_loss": 0.2212,
+  "best_metrics": {
+    "closed-ended": {
+      "n_samples": 251,
+      "Accuracy": 0.645418
+    },
+    "open-ended": {
+      "n_samples": 200,
+      "Accuracy": 0.135,
+      "Exact Match": 0.135,
+      "BLEU": 0.04537,
+      "ROUGE-L": 0.229581,
+      "BERTScore": 0.0
+    },
+    "hallucination": {
+      "Hallucination Rate": 0.0
+    },
+    "performance": {
+      "inference_time_s": 387.664,
+      "throughput_samples_per_sec": 1.163
+    }
+  }
+}

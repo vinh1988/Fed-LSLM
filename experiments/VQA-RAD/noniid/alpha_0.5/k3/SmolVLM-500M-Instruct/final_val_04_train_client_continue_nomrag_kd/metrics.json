@@ -1,21 +1,21 @@
 {
   "closed-ended": {
     "n_samples": 251,
-    "Accuracy": 0.669323
+    "Accuracy": 0.685259
   },
   "open-ended": {
     "n_samples": 200,
-    "Accuracy": 0.285,
-    "Exact Match": 0.19,
-    "BLEU": 0.053156,
-    "ROUGE-L": 0.265497,
-    "BERTScore": 0.893377
+    "Accuracy": 0.275,
+    "Exact Match": 0.195,
+    "BLEU": 0.056066,
+    "ROUGE-L": 0.261366,
+    "BERTScore": 0.893466
   },
   "hallucination": {
-    "Hallucination Rate": 0.518847
+    "Hallucination Rate": 0.503326
   },
   "performance": {
-    "inference_time_s": 288.75,
-    "throughput_samples_per_sec": 1.56
+    "inference_time_s": 306.01,
+    "throughput_samples_per_sec": 1.47
   }
 }

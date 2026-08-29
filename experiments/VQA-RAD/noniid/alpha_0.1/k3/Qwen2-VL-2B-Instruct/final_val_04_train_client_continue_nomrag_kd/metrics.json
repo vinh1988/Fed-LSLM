@@ -15,7 +15,7 @@
     "Hallucination Rate": 0.472284
   },
   "performance": {
-    "inference_time_s": 228.22,
-    "throughput_samples_per_sec": 1.98
+    "inference_time_s": 231.95,
+    "throughput_samples_per_sec": 1.94
   }
 }
