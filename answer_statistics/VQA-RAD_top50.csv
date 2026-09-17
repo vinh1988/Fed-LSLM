@@ -1,0 +1,51 @@
+answer,count,percentage
+no,606,27.0053
+yes,585,26.0695
+axial,43,1.9162
+right,26,1.1586
+left,19,0.8467
+pa,15,0.6684
+ct,13,0.5793
+brain,13,0.5793
+fat,9,0.4011
+mri,8,0.3565
+x-ray,8,0.3565
+one,8,0.3565
+right side,8,0.3565
+with contrast,7,0.3119
+bilateral,7,0.3119
+diffuse,7,0.3119
+right lung,7,0.3119
+right upper lobe,7,0.3119
+pancreas,6,0.2674
+flair,6,0.2674
+right sided pleural effusion,6,0.2674
+"5.6cm focal, predominantly hypodense",6,0.2674
+lateral ventricles,6,0.2674
+left kidney,6,0.2674
+female,6,0.2674
+contrast,5,0.2228
+right temporal lobe,5,0.2228
+t2 weighted,5,0.2228
+abscess,5,0.2228
+ribs,5,0.2228
+right frontal lobe,5,0.2228
+hyperintense,4,0.1783
+calcification,4,0.1783
+pleural effusion,4,0.1783
+chest,4,0.1783
+infarct,4,0.1783
+oral and iv,4,0.1783
+subarachnoid,4,0.1783
+gi,4,0.1783
+right lobe of the liver,4,0.1783
+ring-enhancing lesion,4,0.1783
+retrocardiac,4,0.1783
+air,4,0.1783
+chest x-ray,4,0.1783
+cerebellum,4,0.1783
+enlarged,4,0.1783
+left side,4,0.1783
+white matter,4,0.1783
+ring enhancing lesion,4,0.1783
+4th ventricle,4,0.1783

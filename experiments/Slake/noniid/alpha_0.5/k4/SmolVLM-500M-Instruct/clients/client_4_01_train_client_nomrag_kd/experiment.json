@@ -1,0 +1,16 @@
+{
+  "dataset": "Slake",
+  "setting": "noniid",
+  "alpha": 0.5,
+  "k": 4,
+  "client_id": 4,
+  "model": "SmolVLM-500M-Instruct",
+  "epochs": 1,
+  "lr": 0.0002,
+  "batch_size": 1,
+  "grad_accum": 8,
+  "seed": 42,
+  "num_train_samples": 1563,
+  "num_test_samples": 1055,
+  "avg_train_loss": 1.442546
+}

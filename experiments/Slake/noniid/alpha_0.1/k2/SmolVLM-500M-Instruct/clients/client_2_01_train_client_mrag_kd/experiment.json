@@ -1,0 +1,60 @@
+{
+  "dataset": "Slake",
+  "setting": "noniid",
+  "alpha": 0.1,
+  "k": 2,
+  "client_id": 2,
+  "model": "SmolVLM-500M-Instruct",
+  "epochs": 1,
+  "lr": 0.0002,
+  "batch_size": 1,
+  "grad_accum": 8,
+  "rag_k": 3,
+  "seed": 42,
+  "num_train_samples": 3047,
+  "num_test_samples": 1055,
+  "best_epoch": 1,
+  "best_metrics": {
+    "closed-ended": {
+      "n_samples": 421,
+      "Accuracy": 0.84323
+    },
+    "open-ended": {
+      "n_samples": 634,
+      "Accuracy": 0.490536,
+      "Exact Match": 0.490536,
+      "BLEU": 0.14678,
+      "ROUGE-L": 0.582705,
+      "BERTScore": 0.0
+    },
+    "hallucination": {
+      "Hallucination Rate": 0.0
+    },
+    "performance": {
+      "inference_time_s": 944.86,
+      "throughput_samples_per_sec": 1.117
+    }
+  },
+  "avg_metrics": {
+    "avg_train_loss": 0.667724,
+    "closed-ended": {
+      "n_samples": 421,
+      "Accuracy": 0.84323
+    },
+    "open-ended": {
+      "n_samples": 634,
+      "Accuracy": 0.490536,
+      "Exact Match": 0.490536,
+      "BLEU": 0.14678,
+      "ROUGE-L": 0.582705,
+      "BERTScore": 0.0
+    },
+    "hallucination": {
+      "Hallucination Rate": 0.0
+    },
+    "performance": {
+      "inference_time_s": 944.86,
+      "throughput_samples_per_sec": 1.117
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "dataset": "VQA-RAD",
+  "setting": "noniid",
+  "alpha": 0.5,
+  "k": 3,
+  "client_id": 1,
+  "model": "Qwen2-VL-2B-Instruct",
+  "epochs": 1,
+  "lr": 0.0002,
+  "batch_size": 1,
+  "grad_accum": 8,
+  "seed": 42,
+  "num_train_samples": 472,
+  "num_test_samples": 451,
+  "best_epoch": 1,
+  "best_metrics": {
+    "closed-ended": {
+      "n_samples": 251,
+      "Accuracy": 0.59761
+    },
+    "open-ended": {
+      "n_samples": 200,
+      "Accuracy": 0.21,
+      "Exact Match": 0.21,
+      "BLEU": 0.057801,
+      "ROUGE-L": 0.30404,
+      "BERTScore": 0.0
+    },
+    "hallucination": {
+      "Hallucination Rate": 0.0
+    },
+    "performance": {
+      "inference_time_s": 286.1,
+      "throughput_samples_per_sec": 1.576
+    }
+  },
+  "avg_metrics": {
+    "avg_train_loss": 0.487294,
+    "closed-ended": {
+      "n_samples": 251,
+      "Accuracy": 0.59761
+    },
+    "open-ended": {
+      "n_samples": 200,
+      "Accuracy": 0.21,
+      "Exact Match": 0.21,
+      "BLEU": 0.057801,
+      "ROUGE-L": 0.30404,
+      "BERTScore": 0.0
+    },
+    "hallucination": {
+      "Hallucination Rate": 0.0
+    },
+    "performance": {
+      "inference_time_s": 286.1,
+      "throughput_samples_per_sec": 1.576
+    }
+  }
+}

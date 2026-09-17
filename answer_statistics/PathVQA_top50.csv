@@ -1,0 +1,51 @@
+answer,count,percentage
+yes,8906,27.2922
+no,7332,22.4687
+oral,576,1.7651
+cardiovascular,534,1.6364
+gastrointestinal,416,1.2748
+hematologic,412,1.2626
+endocrine,412,1.2626
+hepatobiliary,380,1.1645
+lung,341,1.045
+liver,298,0.9132
+female reproductive,288,0.8826
+vasculature,286,0.8764
+nervous,265,0.8121
+urinary,253,0.7753
+spleen,249,0.7631
+heart,239,0.7324
+gastrointestinal system,208,0.6374
+endocrine system,205,0.6282
+respiratory,203,0.6221
+skin,193,0.5914
+brain,171,0.524
+extremities,170,0.521
+joints,160,0.4903
+female reproductive system,158,0.4842
+abdomen,138,0.4229
+kidney,124,0.38
+pancreas,121,0.3708
+lymph node,93,0.285
+adrenal,89,0.2727
+uterus,89,0.2727
+breast,81,0.2482
+bone marrow,76,0.2329
+thymus,65,0.1992
+pituitary,62,0.19
+hand,58,0.1777
+colon,55,0.1685
+ovary,51,0.1563
+bone,50,0.1532
+metastatic carcinoma,50,0.1532
+peritoneum,48,0.1471
+prostate,46,0.141
+thyroid,46,0.141
+soft tissue,43,0.1318
+blood,41,0.1256
+stomach,37,0.1134
+"bone, calvarium",37,0.1134
+pancreatic fat necrosis,37,0.1134
+basilar skull fracture,36,0.1103
+this,36,0.1103
+adenocarcinoma,35,0.1073

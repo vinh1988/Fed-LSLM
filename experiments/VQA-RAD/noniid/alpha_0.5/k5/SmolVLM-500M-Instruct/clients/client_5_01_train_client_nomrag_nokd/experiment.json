@@ -1,0 +1,59 @@
+{
+  "dataset": "VQA-RAD",
+  "setting": "noniid",
+  "alpha": 0.5,
+  "k": 5,
+  "client_id": 5,
+  "model": "SmolVLM-500M-Instruct",
+  "epochs": 5,
+  "lr": 0.0002,
+  "batch_size": 1,
+  "grad_accum": 2,
+  "seed": 42,
+  "num_train_samples": 865,
+  "num_test_samples": 451,
+  "best_epoch": 2,
+  "best_metrics": {
+    "closed-ended": {
+      "n_samples": 251,
+      "Accuracy": 0.621514
+    },
+    "open-ended": {
+      "n_samples": 200,
+      "Accuracy": 0.195,
+      "Exact Match": 0.195,
+      "BLEU": 0.05524,
+      "ROUGE-L": 0.289433,
+      "BERTScore": 0.0
+    },
+    "hallucination": {
+      "Hallucination Rate": 0.0
+    },
+    "performance": {
+      "inference_time_s": 336.243,
+      "throughput_samples_per_sec": 1.341
+    }
+  },
+  "avg_metrics": {
+    "avg_train_loss": 0.780216,
+    "closed-ended": {
+      "n_samples": 251,
+      "Accuracy": 0.609562
+    },
+    "open-ended": {
+      "n_samples": 200,
+      "Accuracy": 0.178,
+      "Exact Match": 0.178,
+      "BLEU": 0.052091,
+      "ROUGE-L": 0.26681,
+      "BERTScore": 0.0
+    },
+    "hallucination": {
+      "Hallucination Rate": 0.0
+    },
+    "performance": {
+      "inference_time_s": 425.641,
+      "throughput_samples_per_sec": 1.117
+    }
+  }
+}

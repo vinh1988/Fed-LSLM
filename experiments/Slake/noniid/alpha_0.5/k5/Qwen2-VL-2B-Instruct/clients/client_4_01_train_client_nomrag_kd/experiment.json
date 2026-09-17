@@ -1,0 +1,16 @@
+{
+  "dataset": "Slake",
+  "setting": "noniid",
+  "alpha": 0.5,
+  "k": 5,
+  "client_id": 4,
+  "model": "Qwen2-VL-2B-Instruct",
+  "epochs": 1,
+  "lr": 0.0002,
+  "batch_size": 1,
+  "grad_accum": 8,
+  "seed": 42,
+  "num_train_samples": 1141,
+  "num_test_samples": 1055,
+  "avg_train_loss": 0.357515
+}

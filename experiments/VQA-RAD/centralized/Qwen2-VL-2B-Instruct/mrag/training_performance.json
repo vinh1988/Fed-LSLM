@@ -1,0 +1,10 @@
+{
+  "avg_epoch_time_s": 910.480973482132,
+  "avg_allocated_vram_gb": 1.781652836977804,
+  "epoch_times": [
+    910.480973482132
+  ],
+  "epoch_vram_usage_gb": [
+    1.781652836977804
+  ]
+}
