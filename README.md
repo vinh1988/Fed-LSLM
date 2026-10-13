@@ -253,30 +253,6 @@ Example:
 
 ---
 
-## Visualization Outputs
-
-Generated figures are stored under:
-
-```text
-visualizations/
-```
-
-Examples:
-
-```text
-SLAKE_split_sizes.png
-SLAKE_client_distribution.png
-SLAKE_heatmap_alpha_0.5_k5.png
-SLAKE_heatmap_alpha_0.1_k5.png
-
-VQA-RAD_split_sizes.png
-VQA-RAD_client_distribution.png
-VQA-RAD_heatmap_alpha_0.5_k5.png
-VQA-RAD_heatmap_alpha_0.1_k5.png
-```
-
----
-
 ## Intended Research Usage
 
 This dataset organization supports:
