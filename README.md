@@ -1,4 +1,5 @@
 # Fed-LSLM: Federated Large-Small Vision-Language Model Collaboration for Medical Visual Question Answering
+
 ## How to Run
 uv run prepare_dataset.py
 
@@ -251,7 +252,6 @@ Example:
 ```
 
 ---
-
 
 ## Intended Research Usage
 
