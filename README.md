@@ -6,7 +6,7 @@ uv run prepare_dataset.py
 
 This repository prepares two medical Visual Question Answering (VQA) datasets:
 
-* PathVQA
+* SLAKE
 * VQA-RAD
 
 The datasets are converted into a unified format and partitioned for centralized and federated learning experiments.
@@ -18,7 +18,7 @@ The datasets are converted into a unified format and partitioned for centralized
 ```text
 processed_data/
 │
-├── PathVQA/
+├── SLAKE/
 │   ├── dataset_summary.csv
 │   ├── config.json
 │   │
@@ -238,7 +238,7 @@ Example:
 
 ```json
 {
-  "dataset": "PathVQA",
+  "dataset": "SLAKE",
   "seed": 42,
   "clients": [2, 3, 4, 5],
   "alphas": [0.5, 0.1],
@@ -252,29 +252,6 @@ Example:
 
 ---
 
-## Visualization Outputs
-
-Generated figures are stored under:
-
-```text
-visualizations/
-```
-
-Examples:
-
-```text
-PathVQA_split_sizes.png
-PathVQA_client_distribution.png
-PathVQA_heatmap_alpha_0.5_k5.png
-PathVQA_heatmap_alpha_0.1_k5.png
-
-VQA-RAD_split_sizes.png
-VQA-RAD_client_distribution.png
-VQA-RAD_heatmap_alpha_0.5_k5.png
-VQA-RAD_heatmap_alpha_0.1_k5.png
-```
-
----
 
 ## Intended Research Usage
 
