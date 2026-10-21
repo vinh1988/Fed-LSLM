@@ -1,5 +1,4 @@
-# Federated Large-Small Language Models with Multimodal Retrieval-Augmented Generation for Medical Visual Question Answering
-
+# Fed-LSLM: Federated Large-Small Vision-Language Model Collaboration for Medical Visual Question Answering
 ## How to Run
 uv run prepare_dataset.py
 
