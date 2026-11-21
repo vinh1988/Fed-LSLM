@@ -449,7 +449,10 @@ def main():
     base = Path("experiments") / args.dataset / args.setting
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
-    base = base / f"k{args.k}" / args.model_short / "server"
+    base = base / f"k{args.k}"
+    if args.seed != 42:
+        base = base / f"seed_{args.seed}"
+    base = base / args.model_short / "server"
     
     data_root = Path("processed_data")
     

@@ -87,13 +87,18 @@ def main():
                         help="Path to clients directory (auto-generated if not provided)")
     parser.add_argument("--output_dir", type=str, default=None,
                         help="Path to output directory (auto-generated if not provided)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Seed; non-42 seeds use a seed_{s} path component (must match training runs)")
     args = parser.parse_args()
 
     # Auto-generate paths if not provided
     base = Path("experiments") / args.dataset / args.setting
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
-    base = base / f"k{args.k}" / args.model_short
+    base = base / f"k{args.k}"
+    if args.seed != 42:
+        base = base / f"seed_{args.seed}"
+    base = base / args.model_short
     
     if args.clients_dir is None:
         args.clients_dir = str(base / "clients")

@@ -224,13 +224,18 @@ def main():
                         help="Path to Slake images (auto-generated if not provided)")
     parser.add_argument("--out_dir", type=str, default=None,
                         help="Output directory (auto-generated if not provided)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Seed; non-42 seeds use a seed_{s} path component (must match training runs)")
     args = parser.parse_args()
 
     # Auto-generate paths if not provided
     base = Path("experiments") / args.dataset / args.setting
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
-    base = base / f"k{args.k}" / args.model_short
+    base = base / f"k{args.k}"
+    if args.seed != 42:
+        base = base / f"seed_{args.seed}"
+    base = base / args.model_short
     data_root = Path("processed_data")
     
     if args.global_adapter_final is None:

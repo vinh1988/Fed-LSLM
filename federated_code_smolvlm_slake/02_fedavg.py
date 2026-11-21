@@ -27,6 +27,8 @@ def main():
                         help="Script name suffix (e.g., icl, nonicl, icl_nokd, 01_train_client_mrag_kd). If not provided, uses this script's name.")
     parser.add_argument("--model_short", type=str, default="SmolVLM-500M-Instruct",
                         help="Short model name for directory naming")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Seed; non-42 seeds use a seed_{s} path component (must match training runs)")
     args = parser.parse_args()
 
     # Use provided mode or default to this script's name
@@ -36,7 +38,10 @@ def main():
     base = Path("experiments") / args.dataset / args.setting
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
-    base = base / f"k{args.k}" / args.model_short
+    base = base / f"k{args.k}"
+    if args.seed != 42:
+        base = base / f"seed_{args.seed}"
+    base = base / args.model_short
 
     # Build client paths with suffix
     client_paths = []

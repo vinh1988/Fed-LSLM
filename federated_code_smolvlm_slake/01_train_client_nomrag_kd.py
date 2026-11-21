@@ -89,10 +89,15 @@ def set_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
-def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int, model_short: str) -> Path:
+def seed_path_component(seed: int) -> str:
+    """Return 'seed_{s}' path component for non-default seeds, '' for seed 42 (legacy paths)."""
+    return f"seed_{seed}" if seed != 42 else ""
+
+
+def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int, model_short: str, seed: int = 42) -> Path:
     """
     Construct the experiment output directory following the Experiment Space spec:
-        experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/{model}/clients/client_{id}_scriptname/
+        experiments/{dataset}/{setting}/[alpha_{alpha}/]k{k}/[seed_{seed}/]{model}/clients/client_{id}_scriptname/
     """
     script_name = Path(__file__).stem
     base = Path("experiments") / dataset / setting
@@ -100,17 +105,21 @@ def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int, 
         if alpha is None:
             raise ValueError("--alpha must be set for noniid setting")
         base = base / f"alpha_{alpha}"
-    base = base / f"k{k}" / model_short / "clients" / f"client_{client_id}_{script_name}"
+    base = base / f"k{k}"
+    seed_comp = seed_path_component(seed)
+    if seed_comp:
+        base = base / seed_comp
+    base = base / model_short / "clients" / f"client_{client_id}_{script_name}"
     return base
 
 
-def resolve_data_paths(dataset: str, setting: str, alpha, k: int, client_id: int):
+def resolve_data_paths(dataset: str, setting: str, alpha, k: int, client_id: int, seed: int = 42):
     """
     Returns (client_csv_path, test_csv_path, image_base_dir).
 
     Data layout on disk:
         processed_data/{dataset}/federated_iid/k{k}/client_{id}.csv
-        processed_data/{dataset}/federated_noniid/alpha_{alpha}/k{k}/client_{id}.csv
+        processed_data/{dataset}/federated_noniid/alpha_{alpha}/k{k}/[seed_{seed}/]client_{id}.csv
         processed_data/{dataset}/centralized/test.csv
         processed_data/{dataset}/centralized/images/...   ← image root
     """
@@ -121,7 +130,11 @@ def resolve_data_paths(dataset: str, setting: str, alpha, k: int, client_id: int
     elif setting == "noniid":
         if alpha is None:
             raise ValueError("--alpha must be set for noniid setting")
-        client_csv = data_root / "federated_noniid" / f"alpha_{alpha}" / f"k{k}" / f"client_{client_id}.csv"
+        part_dir = data_root / "federated_noniid" / f"alpha_{alpha}" / f"k{k}"
+        seed_comp = seed_path_component(seed)
+        if seed_comp:
+            part_dir = part_dir / seed_comp
+        client_csv = part_dir / f"client_{client_id}.csv"
     else:
         raise ValueError(f"Unknown setting '{setting}'. Choose from: iid, noniid")
 
@@ -501,9 +514,9 @@ def train_single_client(args, client_id: int):
 
     # ── Paths ────────────────────────────────────────────────────────────────
     client_csv, test_csv, image_root = resolve_data_paths(
-        args.dataset, args.setting, args.alpha, args.k, client_id
+        args.dataset, args.setting, args.alpha, args.k, client_id, args.seed
     )
-    out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id, args.model_short)
+    out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id, args.model_short, args.seed)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     alpha_str = f"alpha_{args.alpha}" if args.alpha is not None else "N/A"

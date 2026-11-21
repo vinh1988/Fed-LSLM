@@ -19,6 +19,7 @@ DATASET="Slake"
 SETTING="noniid"
 ALPHA=0.1
 K=2
+SEED=42
 CONTINUE_MODE="04_train_client_continue_nomrag_kd"  # Mode for step 04 (continue training)
 VQARAD_MODE="01_train_client_nomrag_kd"  # Mode for VQA-RAD adapter from step 03
 MODEL_VERSION="smolvlm500"  # Options: "2", "2.5", or "smolvlm500"
@@ -85,6 +86,10 @@ while [[ $# -gt 0 ]]; do
             MODEL_SHORT="$2"
             shift 2
             ;;
+        --seed)
+            SEED="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -97,6 +102,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --model_version VERSION  Model version: 2, 2.5, or smolvlm500 (default: smolvlm500)"
             echo "  --model_name MODEL_NAME  VLM model name from HuggingFace (auto-set by model_version by default)"
             echo "  --model_short MODEL_SHORT Short model name for directory naming (auto-set by model_version by default)"
+            echo "  --seed SEED                Random seed (default: 42; non-42 uses seed_{s} dirs)"
             echo "  --help                  Show this help message"
             exit 0
             ;;
@@ -114,7 +120,11 @@ EXPERIMENTS_DIR="$PROJECT_ROOT/experiments/$DATASET/$SETTING"
 if [ "$SETTING" = "noniid" ]; then
     EXPERIMENTS_DIR="$EXPERIMENTS_DIR/alpha_$ALPHA"
 fi
-EXPERIMENTS_DIR="$EXPERIMENTS_DIR/k${K}/$MODEL_SHORT"
+EXPERIMENTS_DIR="$EXPERIMENTS_DIR/k${K}"
+if [ "$SEED" != "42" ]; then
+    EXPERIMENTS_DIR="$EXPERIMENTS_DIR/seed_${SEED}"
+fi
+EXPERIMENTS_DIR="$EXPERIMENTS_DIR/$MODEL_SHORT"
 SERVER_DIR="$EXPERIMENTS_DIR/server"
 CLIENTS_DIR="$EXPERIMENTS_DIR/clients"
 
@@ -129,6 +139,7 @@ echo "Dataset: $DATASET"
 echo "Setting: $SETTING"
 echo "Alpha: $ALPHA"
 echo "K: $K"
+echo "Seed: $SEED"
 echo "Continue Mode: $CONTINUE_MODE"
 echo "Model: $MODEL_NAME"
 echo "Model Short: $MODEL_SHORT"
@@ -199,7 +210,7 @@ else
     echo ""
     
     cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/01_train_client_nomrag_kd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
+    if eval "uv run $FEDERATED_CODE/01_train_client_nomrag_kd.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT --seed $SEED"; then
         echo "[SUCCESS] Federated Client Training (No-RAG with KD, 1 epoch) completed"
         echo ""
     else
@@ -213,7 +224,7 @@ fi
 # STEP 02: Federated Averaging
 # ==============================================================================
 STEP02_OUTPUT="$SERVER_DIR/global_adapter_01_train_client_nomrag_kd"
-STEP02_CMD="uv run $FEDERATED_CODE/02_fedavg.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --mode 01_train_client_nomrag_kd --model_short $MODEL_SHORT"
+STEP02_CMD="uv run $FEDERATED_CODE/02_fedavg.py --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --mode 01_train_client_nomrag_kd --model_short $MODEL_SHORT --seed $SEED"
 
 run_step "02" "Federated Averaging" "$STEP02_CMD" "$STEP02_OUTPUT"
 
@@ -221,7 +232,7 @@ run_step "02" "Federated Averaging" "$STEP02_CMD" "$STEP02_OUTPUT"
 # STEP 03: Knowledge Distillation (ROCO + VQA-RAD)
 # ==============================================================================
 STEP03_OUTPUT="$SERVER_DIR/global_adapter_roco_vqarad_01_train_client_nomrag_kd"
-STEP03_CMD="uv run $FEDERATED_CODE/03_train_kd_roco_vqarad.py --mode 01_train_client_nomrag_kd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
+STEP03_CMD="uv run $FEDERATED_CODE/03_train_kd_roco_vqarad.py --mode 01_train_client_nomrag_kd --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT --seed $SEED"
 
 run_step "03" "Knowledge Distillation (ROCO + VQA-RAD)" "$STEP03_CMD" "$STEP03_OUTPUT"
 
@@ -244,7 +255,7 @@ else
     echo ""
     
     cd "$PROJECT_ROOT"
-    if eval "uv run $FEDERATED_CODE/04_train_client_continue_nomrag_kd.py --mode $CONTINUE_MODE --roco_slake_mode $VQARAD_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"; then
+    if eval "uv run $FEDERATED_CODE/04_train_client_continue_nomrag_kd.py --mode $CONTINUE_MODE --roco_slake_mode $VQARAD_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT --seed $SEED"; then
         echo "[SUCCESS] Continue Training on Slake completed"
         echo ""
     else
@@ -258,7 +269,7 @@ fi
 # STEP 05: Final Federated Averaging
 # ==============================================================================
 STEP05_OUTPUT="$SERVER_DIR/global_adapter_${CONTINUE_MODE}"
-STEP05_CMD="uv run $FEDERATED_CODE/05_fedavg_final_nomrag_kd.py --mode $CONTINUE_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_short $MODEL_SHORT"
+STEP05_CMD="uv run $FEDERATED_CODE/05_fedavg_final_nomrag_kd.py --mode $CONTINUE_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_short $MODEL_SHORT --seed $SEED"
 
 run_step "05" "Final Federated Averaging" "$STEP05_CMD" "$STEP05_OUTPUT"
 
@@ -266,7 +277,7 @@ run_step "05" "Final Federated Averaging" "$STEP05_CMD" "$STEP05_OUTPUT"
 # STEP 06: Final Validation
 # ==============================================================================
 STEP06_OUTPUT="$EXPERIMENTS_DIR/final_val_${CONTINUE_MODE}"
-STEP06_CMD="uv run $FEDERATED_CODE/06_val_final_nomrag_kd.py --mode $CONTINUE_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT"
+STEP06_CMD="uv run $FEDERATED_CODE/06_val_final_nomrag_kd.py --mode $CONTINUE_MODE --dataset $DATASET --setting $SETTING --alpha $ALPHA --k $K --model_name $MODEL_NAME --model_short $MODEL_SHORT --seed $SEED"
 
 run_step "06" "Final Validation" "$STEP06_CMD" "$STEP06_OUTPUT"
 

@@ -367,24 +367,37 @@ def evaluate_model(model, processor, test_df, image_root, rouge_scr, device, des
 # Main Training Loop
 # ──────────────────────────────────────────────────────────────────────────────
 
-def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int, model_short: str) -> Path:
+def seed_path_component(seed: int) -> str:
+    """Return 'seed_{s}' path component for non-default seeds, '' for seed 42 (legacy paths)."""
+    return f"seed_{seed}" if seed != 42 else ""
+
+
+def build_output_dir(dataset: str, setting: str, alpha, k: int, client_id: int, model_short: str, seed: int = 42) -> Path:
     script_name = Path(__file__).stem
     base = Path("experiments") / dataset / setting
     if setting == "noniid":
         if alpha is None:
             raise ValueError("--alpha must be set for noniid setting")
         base = base / f"alpha_{alpha}"
-    base = base / f"k{k}" / model_short / "clients" / f"client_{client_id}_{script_name}"
+    base = base / f"k{k}"
+    seed_comp = seed_path_component(seed)
+    if seed_comp:
+        base = base / seed_comp
+    base = base / model_short / "clients" / f"client_{client_id}_{script_name}"
     return base
 
-def resolve_data_paths(dataset: str, setting: str, alpha, k: int, client_id: int):
+def resolve_data_paths(dataset: str, setting: str, alpha, k: int, client_id: int, seed: int = 42):
     data_root = Path("processed_data") / dataset
     if setting == "iid":
         client_csv = data_root / "federated_iid" / f"k{k}" / f"client_{client_id}.csv"
     elif setting == "noniid":
         if alpha is None:
             raise ValueError("--alpha must be set for noniid setting")
-        client_csv = data_root / "federated_noniid" / f"alpha_{alpha}" / f"k{k}" / f"client_{client_id}.csv"
+        part_dir = data_root / "federated_noniid" / f"alpha_{alpha}" / f"k{k}"
+        seed_comp = seed_path_component(seed)
+        if seed_comp:
+            part_dir = part_dir / seed_comp
+        client_csv = part_dir / f"client_{client_id}.csv"
     else:
         raise ValueError(f"Unknown setting '{setting}'. Choose from: iid, noniid")
     
@@ -424,7 +437,11 @@ def main():
     base = Path("experiments") / args.dataset / args.setting
     if args.setting == "noniid":
         base = base / f"alpha_{args.alpha}"
-    base = base / f"k{args.k}" / args.model_short / "server"
+    base = base / f"k{args.k}"
+    seed_comp = seed_path_component(args.seed)
+    if seed_comp:
+        base = base / seed_comp
+    base = base / args.model_short / "server"
     
     if args.global_adapter_roco_slake is None:
         args.global_adapter_roco_slake = str(base / f"global_adapter_roco_vqarad_{args.roco_slake_mode}")
@@ -480,8 +497,8 @@ def main():
         # Restore global weights to ensure isolation
         model.load_state_dict(global_state_dict, strict=False)
 
-        client_csv, test_csv, image_root = resolve_data_paths(args.dataset, args.setting, args.alpha, args.k, client_id)
-        out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id, args.model_short)
+        client_csv, test_csv, image_root = resolve_data_paths(args.dataset, args.setting, args.alpha, args.k, client_id, args.seed)
+        out_dir = build_output_dir(args.dataset, args.setting, args.alpha, args.k, client_id, args.model_short, args.seed)
         out_dir.mkdir(parents=True, exist_ok=True)
         
         train_df = pd.read_csv(client_csv)
